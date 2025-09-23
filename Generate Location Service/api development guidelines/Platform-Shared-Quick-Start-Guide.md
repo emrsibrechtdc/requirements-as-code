@@ -16,7 +16,7 @@ This guide will help you quickly integrate the Platform.Shared library into your
 Add the Platform.Shared library to your project:
 
 ```xml
-<PackageReference Include="Platform.Shared" Version="1.0.0" />
+<PackageReference Include="Platform.Shared" Version="1.1.20250915.1" />
 ```
 
 ## Step 2: Basic Setup
@@ -31,18 +31,17 @@ using Platform.Shared.MultiProduct.Extensions;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Add Platform.Shared services
+// Add Platform.Shared services with v1.1.20250915.1 patterns
 builder.Services.AddPlatformCommonHttpApi(
     builder.Configuration, 
-    builder.Configuration, 
+    (IConfigurationBuilder)builder.Configuration, 
     builder.Environment, 
-    "YourService", // Module name
-    majorVersion: 1, 
-    minorVersion: 0);
+    "YourService") // Module name
+    .WithAuditing()
+    .WithMultiProduct();
 
-builder.Services.AddPlatformCommonAuditing();
+// Integration events typically added in Application project extension
 builder.Services.AddIntegrationEventsServices();
-builder.Services.AddMultiProductServices();
 
 // Add MediatR with Platform.Shared behaviors
 builder.Services.AddMediatR(cfg => {
@@ -80,9 +79,10 @@ public class YourDbContext : PlatformDbContext
 {
     public YourDbContext(
         DbContextOptions<YourDbContext> options,
+        ILogger<YourDbContext> logger,
         IAuditPropertySetter auditPropertySetter,
         IDataFilter dataFilter) 
-        : base(options, auditPropertySetter, dataFilter)
+        : base(options, logger, auditPropertySetter, dataFilter)
     {
     }
 
@@ -169,6 +169,7 @@ public enum DeviceStatus
 ```csharp
 using MediatR;
 using Platform.Shared.Cqrs.Mediatr;
+using Platform.Shared.DataLayer.Repositories;
 using Platform.Shared.MultiProduct;
 using Platform.Shared.IntegrationEvents;
 

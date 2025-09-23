@@ -138,17 +138,13 @@ The library includes the following key dependencies:
 ```csharp
 public void ConfigureServices(IServiceCollection services)
 {
-    // Add Platform Common HTTP API
-    services.AddPlatformCommonHttpApi(configuration, configBuilder, env, "YourModule");
+    // Add Platform Common HTTP API with fluent configuration (v1.1.20250915.1+)
+    services.AddPlatformCommonHttpApi(configuration, configBuilder, env, "YourModule")
+           .WithAuditing()
+           .WithMultiProduct();
     
-    // Add auditing
-    services.AddPlatformCommonAuditing();
-    
-    // Add integration events
+    // Add integration events (typically in Application project)
     services.AddIntegrationEventsServices();
-    
-    // Add multi-product support
-    services.AddMultiProductServices();
 }
 ```
 
@@ -156,7 +152,7 @@ public void ConfigureServices(IServiceCollection services)
 ```csharp
 public class YourDbContext : PlatformDbContext
 {
-    public YourDbContext(DbContextOptions<YourDbContext> options) : base(options)
+    public YourDbContext(DbContextOptions<YourDbContext> options, ILogger<YourDbContext> logger) : base(options, logger)
     {
     }
 
@@ -165,7 +161,8 @@ public class YourDbContext : PlatformDbContext
         base.OnModelCreating(modelBuilder);
         
         // Configure your entities
-        modelBuilder.ConfigurePlatformEntities();
+        // Note: ConfigurePlatformEntities() may have changed in v1.1.20250915.1
+        // modelBuilder.ConfigurePlatformEntities();
     }
 }
 ```

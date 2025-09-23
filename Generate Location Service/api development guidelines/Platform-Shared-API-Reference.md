@@ -383,10 +383,10 @@ namespace Platform.Shared.IntegrationEvents
         Task PublishAllIntegrationEvents(CancellationToken cancellationToken = default);
 
         /// <summary>
-        /// Adds an integration event to the queue
+        /// Saves an integration event to be published after transaction commit
         /// </summary>
-        /// <param name="integrationEvent">Event to add</param>
-        void AddIntegrationEvent(IIntegrationEvent integrationEvent);
+        /// <param name="integrationEvent">Event to save</param>
+        void SaveIntegrationEvent(IIntegrationEvent integrationEvent);
     }
 
     /// <summary>
@@ -534,6 +534,12 @@ namespace Platform.Shared.MultiProduct
         /// </summary>
         /// <returns>Product identifier</returns>
         Task<string> GetProductAsync();
+        
+        /// <summary>
+        /// Sets the current product for the request
+        /// </summary>
+        /// <param name="product">Product identifier</param>
+        void SetProduct(string product);
     }
 
     /// <summary>
@@ -706,7 +712,25 @@ namespace Platform.Shared.HttpApi.Extensions
             ModuleName = moduleName;
         }
 
-        // Additional configuration methods can be added here
+        /// <summary>
+        /// Adds auditing services
+        /// </summary>
+        /// <returns>Builder for chaining</returns>
+        public PlatformCommonHttpApiBuilder WithAuditing()
+        {
+            Services.AddPlatformCommonAuditing();
+            return this;
+        }
+
+        /// <summary>
+        /// Adds multi-product services
+        /// </summary>
+        /// <returns>Builder for chaining</returns>
+        public PlatformCommonHttpApiBuilder WithMultiProduct()
+        {
+            Services.AddMultiProductServices();
+            return this;
+        }
     }
 }
 ```
@@ -778,6 +802,8 @@ namespace Platform.Shared.Instrumentation
 ```csharp
 namespace Platform.Shared.EntityFrameworkCore
 {
+    using Microsoft.Extensions.Logging;
+    
     /// <summary>
     /// Base database context with platform features
     /// </summary>
@@ -785,16 +811,20 @@ namespace Platform.Shared.EntityFrameworkCore
     {
         protected readonly IAuditPropertySetter? _auditPropertySetter;
         protected readonly IDataFilter? _dataFilter;
+        protected readonly ILogger? _logger;
 
-        public PlatformDbContext(DbContextOptions options) : base(options)
+        public PlatformDbContext(DbContextOptions options, ILogger logger) : base(options)
         {
+            _logger = logger;
         }
 
         public PlatformDbContext(
             DbContextOptions options,
+            ILogger logger,
             IAuditPropertySetter auditPropertySetter,
             IDataFilter dataFilter) : base(options)
         {
+            _logger = logger;
             _auditPropertySetter = auditPropertySetter;
             _dataFilter = dataFilter;
         }
