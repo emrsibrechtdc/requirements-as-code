@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Platform.Shared" Version="1.0.0" />
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="8.0.6" />
+    <PackageReference Include="Swashbuckle.AspNetCore" Version="6.4.0" />
+    <PackageReference Include="Asp.Versioning.Http" Version="8.1.0" />
+    <PackageReference Include="Asp.Versioning.Mvc.ApiExplorer" Version="8.1.0" />
+    <PackageReference Include="MediatR" Version="12.4.0" />
+    <PackageReference Include="Serilog.AspNetCore" Version="8.0.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Locations\Platform.Locations.Application\Platform.Locations.Application.csproj" />
+    <ProjectReference Include="..\Locations\Platform.Locations.Infrastructure\Platform.Locations.Infrastructure.csproj" />
+    <ProjectReference Include="..\Locations\Platform.Locations.HttpApi\Platform.Locations.HttpApi.csproj" />
+    <ProjectReference Include="..\Locations\Platform.Locations.SqlServer\Platform.Locations.SqlServer.csproj" />
+  </ItemGroup>
+
+</Project>

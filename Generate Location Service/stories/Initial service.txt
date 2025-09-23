@@ -1,0 +1,14 @@
+Description
+Generation of new API service:
+- Name: LocationService
+- Endpoints: see specs (C:\Users\e1383938\OneDrive - Copeland\Documents\Projects\AI development transformation\Generate Location Service\api specs\CP-SharedServices-platform-locations-host-requirements-as-code-1.0-resolved.json)
+
+Acceptance Criteria
+- A aspnetcore service is created with all the endpoints of the API specs
+- Api development guidelines are taken into account
+- Platform.Shared library is used where necessary
+- SQL is used as data store
+
+AI Hints
+- Api development guidelines: C:\Users\e1383938\OneDrive - Copeland\Documents\Projects\AI development transformation\Generate Location Service\api development guidelines
+- Platform shared library: C:\Users\e1383938\source\repos\platform-shared

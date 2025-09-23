@@ -1,0 +1,275 @@
+# Platform Locations Service
+
+This is a .NET 8 ASP.NET Core Web API service implementing the LocationService following Clean Architecture principles and using the Platform.Shared library for infrastructure concerns.
+
+## Architecture Overview
+
+The service follows Clean Architecture with clear separation of concerns:
+
+- **Domain Layer**: Business logic, entities, and domain rules
+- **Application Layer**: Use cases, commands, queries, and application services
+- **Infrastructure Layer**: Data access and external service integrations  
+- **HttpApi Layer**: API endpoints and middleware
+- **Host Layer**: Entry point and service configuration
+
+## Key Features
+
+### Platform.Shared Integration
+- **Multi-Product Support**: Automatic data segregation by product context
+- **CQRS Pattern**: Command Query Responsibility Segregation using MediatR
+- **Auditing**: Automatic tracking of entity creation, updates, and deletions
+- **Integration Events**: CloudEvents-based event publishing
+- **Transaction Management**: Automatic database transaction handling
+
+### API Endpoints
+
+The service implements all endpoints from the OpenAPI specification:
+
+- `POST /locations/register` - Register new locations
+- `PUT /locations/{locationCode}/updateaddress` - Update location address
+- `GET /locations` - Get locations (supports filtering by location code prefix)
+- `DELETE /locations` - Delete locations (soft delete)
+- `PUT /locations/{locationCode}/activate` - Activate locations
+- `PUT /locations/{locationCode}/deactivate` - Deactivate locations
+
+### Business Logic
+- Domain-driven design with rich entity models
+- Input validation using FluentValidation
+- Business rule enforcement in domain entities
+- Custom domain exceptions with proper error handling
+
+## Project Structure
+
+```
+Platform.Locations/
+├── src/
+│   ├── Platform.Locations.Host/                    # Web API Host
+│   ├── Core/
+│   │   └── Platform.Locations.Domain/              # Domain Layer
+│   └── Locations/
+│       ├── Platform.Locations.HttpApi/             # HTTP API Layer
+│       ├── Platform.Locations.Application/         # Application Layer
+│       ├── Platform.Locations.Infrastructure/      # Infrastructure Layer
+│       └── Platform.Locations.SqlServer/           # SQL Server Data Store
+└── test/ (to be created)
+    ├── Core/
+    │   └── Platform.Locations.Domain.UnitTests/
+    ├── Locations/
+    │   ├── Platform.Locations.Application.UnitTests/
+    │   └── Platform.Locations.Infrastructure.IntegrationTests/
+    └── Platform.Locations.ApiClient.IntegrationTests/
+```
+
+## Getting Started
+
+### Prerequisites
+- .NET 8.0 SDK
+- SQL Server (LocalDB or full instance)
+- Platform.Shared NuGet package access
+- Git (for source control)
+
+### Source Control Setup
+The solution includes a comprehensive `.gitignore` file that excludes:
+- Build artifacts and binaries
+- IDE-specific files (.vs/, .vscode/, .idea/)
+- Sensitive configuration files (appsettings.*.json)
+- Platform.Shared local packages
+- Test coverage reports
+- Database files
+
+**Important**: Environment-specific configuration files are excluded by design. Use the base `appsettings.json` as a template and create environment-specific files as needed.
+
+### Running the Service
+
+1. **Clone/Extract the solution**
+   ```bash
+   cd platform-locations-generated
+   ```
+
+2. **Build the solution**
+   ```bash
+   dotnet build
+   ```
+
+3. **Update database (apply migrations)**
+   ```bash
+   dotnet ef database update --project src/Locations/Platform.Locations.SqlServer --startup-project src/Platform.Locations.Host
+   ```
+
+4. **Run the service**
+   ```bash
+   dotnet run --project src/Platform.Locations.Host
+   ```
+
+5. **Access the API**
+   - Swagger UI: `https://localhost:7067/swagger`
+   - Health Check: `https://localhost:7067/health`
+
+### Development Testing
+
+In development mode, the service accepts a `local-product` header to simulate multi-product context:
+
+```bash
+curl -X POST https://localhost:7067/locations/register \
+  -H "Content-Type: application/json" \
+  -H "local-product: TestProduct" \
+  -d '{
+    "locationCode": "LOC001",
+    "locationTypeCode": "WAREHOUSE",
+    "addressLine1": "123 Main St",
+    "city": "Anytown",
+    "state": "ST", 
+    "zipCode": "12345",
+    "country": "USA"
+  }'
+```
+
+## Configuration
+
+### Database Connection
+Update `appsettings.json`:
+```json
+{
+  "ConnectionStrings": {
+    "DefaultConnection": "Server=(localdb)\\mssqllocaldb;Database=Platform.Locations;Trusted_Connection=true;MultipleActiveResultSets=true"
+  }
+}
+```
+
+### Logging
+The service uses Serilog with console and Seq sinks. Configure in `appsettings.json`:
+```json
+{
+  "Serilog": {
+    "MinimumLevel": {
+      "Default": "Information",
+      "Override": {
+        "Microsoft": "Warning",
+        "System": "Warning"
+      }
+    }
+  }
+}
+```
+
+## API Usage Examples
+
+### Register a Location
+```bash
+POST /locations/register
+{
+  "locationCode": "WH001",
+  "locationTypeCode": "WAREHOUSE", 
+  "addressLine1": "100 Industrial Blvd",
+  "city": "Manufacturing City",
+  "state": "TX",
+  "zipCode": "75001",
+  "country": "USA"
+}
+```
+
+### Get Locations
+```bash
+# Get all locations
+GET /locations
+
+# Search by location code prefix (minimum 3 characters)
+GET /locations?locationCode=WH0
+```
+
+### Update Address
+```bash
+PUT /locations/WH001/updateaddress
+{
+  "addressLine1": "200 Industrial Blvd",
+  "city": "Manufacturing City", 
+  "state": "TX",
+  "zipCode": "75002",
+  "country": "USA"
+}
+```
+
+### Activate/Deactivate Location
+```bash
+PUT /locations/WH001/activate
+PUT /locations/WH001/deactivate
+```
+
+### Delete Location
+```bash
+DELETE /locations?locationCode=WH001
+```
+
+## Integration Events
+
+The service publishes the following CloudEvents when operations complete:
+- `LocationRegisteredIntegrationEvent`
+- `LocationAddressUpdatedIntegrationEvent`
+- `LocationActivatedIntegrationEvent`
+- `LocationDeactivatedIntegrationEvent`
+- `LocationDeletedIntegrationEvent`
+
+Events are published with product context in CloudEvents headers for proper routing.
+
+## Database Schema
+
+The Location entity includes:
+- **Business Properties**: LocationCode, LocationTypeCode, Address fields
+- **Platform.Shared Auditing**: CreatedAt, CreatedBy, UpdatedAt, UpdatedBy, DeletedAt, DeletedBy
+- **Multi-Product Support**: Product field for data segregation
+- **Activation State**: IsActive flag for activate/deactivate operations
+
+Key indexes:
+- Unique index on LocationCode (globally unique)
+- Unique composite index on (Product, LocationCode)
+- Index on Product for multi-tenant queries
+- Index on LocationTypeCode for filtering
+- Index on IsActive for activation state queries
+
+## Error Handling
+
+The service implements comprehensive error handling:
+- **Domain Exceptions**: Business rule violations (422 Unprocessable Entity)
+- **Validation Exceptions**: Input validation failures (400 Bad Request)
+- **Not Found Exceptions**: Resource not found (404 Not Found)
+- **General Exceptions**: System errors (500 Internal Server Error)
+
+All errors return RFC 7807 Problem Details format.
+
+## Platform.Shared Features Used
+
+- **FullyAuditedActivableAggregateRoot**: Base class for Location entity
+- **IMultiProductObject**: Multi-tenant data segregation
+- **IInstrumentationObject**: Telemetry and monitoring
+- **CQRS Interfaces**: ICommand, IQuery, ICommandHandler, IQueryHandler
+- **TransactionBehavior**: Automatic transaction management
+- **IIntegrationEventPublisher**: CloudEvents publishing
+- **PlatformDbContext**: Entity Framework base context
+- **EfCoreRepository**: Repository base implementation
+
+## Development Guidelines Followed
+
+This implementation follows the Copeland Platform API Development Guidelines v2.0:
+- Clean Architecture with proper layer separation
+- Domain-driven design with rich business logic
+- CQRS pattern for command/query separation
+- Platform.Shared integration for infrastructure concerns
+- Minimal API pattern for endpoint implementation
+- Comprehensive validation and error handling
+- Integration events for decoupled communication
+- Multi-product support with automatic data segregation
+
+## Next Steps
+
+To complete the service implementation:
+1. Add unit tests for domain logic
+2. Add integration tests for API endpoints  
+3. Add application service unit tests
+4. Configure CI/CD pipelines
+5. Set up production monitoring and alerting
+6. Add API client library generation
+7. Configure authentication and authorization for production
+
+## Support
+
+For questions or issues related to Platform.Shared integration, refer to the Platform.Shared documentation or contact the platform team.
