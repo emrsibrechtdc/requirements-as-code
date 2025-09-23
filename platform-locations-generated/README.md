@@ -65,8 +65,38 @@ Platform.Locations/
 ### Prerequisites
 - .NET 8.0 SDK
 - SQL Server (LocalDB or full instance)
-- Platform.Shared NuGet package access
+- Access to Azure DevOps coldchain-software artifact feed
+- Azure Artifacts Credential Provider (or Personal Access Token)
 - Git (for source control)
+
+### NuGet Package Setup
+
+This solution requires access to the **Platform.Shared** library hosted in Azure DevOps Artifacts.
+
+**Package Source**: `coldchain-software`  
+**URL**: `https://pkgs.dev.azure.com/DigitalAndConnectedTechnologies/_packaging/coldchain-software/nuget/v3/index.json`
+
+#### Authentication Setup
+
+1. **Install Azure Artifacts Credential Provider (Recommended):**
+   ```powershell
+   # Run as Administrator
+   iwr https://aka.ms/install-artifacts-credprovider.ps1 | iex
+   ```
+
+2. **Or configure with Personal Access Token:**
+   - Create PAT in Azure DevOps with **Packaging (read)** permission
+   - Add authenticated source:
+   ```bash
+   dotnet nuget add source "https://pkgs.dev.azure.com/DigitalAndConnectedTechnologies/_packaging/coldchain-software/nuget/v3/index.json" --name "coldchain-software" --username "PAT" --password "YOUR_PAT_TOKEN" --store-password-in-clear-text
+   ```
+
+3. **Verify configuration:**
+   ```bash
+   dotnet nuget list source
+   ```
+
+The solution includes a `NuGet.Config` file that automatically configures the package sources and mappings.
 
 ### Source Control Setup
 The solution includes a comprehensive `.gitignore` file that excludes:

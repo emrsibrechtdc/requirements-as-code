@@ -2,7 +2,10 @@
 
 ## Platform.Shared Dependency
 
-This LocationService implementation is designed to use the **Platform.Shared** library for infrastructure concerns. However, since Platform.Shared is a proprietary library that's not publicly available, the solution will not compile without it.
+This LocationService implementation is designed to use the **Platform.Shared** library for infrastructure concerns. Platform.Shared is hosted in a private Azure DevOps Artifacts feed that requires authentication.
+
+**Package Source**: `coldchain-software`  
+**URL**: `https://pkgs.dev.azure.com/DigitalAndConnectedTechnologies/_packaging/coldchain-software/nuget/v3/index.json`
 
 ## Current Status
 
@@ -15,18 +18,33 @@ This LocationService implementation is designed to use the **Platform.Shared** l
 - Multi-product support architecture
 - Database schema and Entity Framework configuration
 
-❌ **Build Status**: 
-The solution currently fails to build due to missing Platform.Shared package references.
+⚠️ **Build Status**: 
+The solution requires authentication to the Azure DevOps coldchain-software artifact feed to access Platform.Shared packages.
 
 ## To Make This Buildable
 
 You have several options:
 
 ### Option 1: Access to Platform.Shared Package
-If you have access to the Platform.Shared NuGet package:
-1. Configure your NuGet sources to include the private feed
-2. Restore packages: `dotnet restore`
-3. Build: `dotnet build`
+The solution is configured with the coldchain-software package source. To access Platform.Shared:
+
+1. **Install Azure Artifacts Credential Provider:**
+   ```powershell
+   # Run as Administrator
+   iwr https://aka.ms/install-artifacts-credprovider.ps1 | iex
+   ```
+
+2. **Or configure Personal Access Token:**
+   ```bash
+   # Create PAT in Azure DevOps with Packaging (read) permission
+   dotnet nuget add source "https://pkgs.dev.azure.com/DigitalAndConnectedTechnologies/_packaging/coldchain-software/nuget/v3/index.json" --name "coldchain-software" --username "PAT" --password "YOUR_PAT_TOKEN" --store-password-in-clear-text
+   ```
+
+3. **Restore and build:**
+   ```bash
+   dotnet restore
+   dotnet build
+   ```
 
 ### Option 2: Replace Platform.Shared with Standard Libraries
 The implementation can be adapted to use standard .NET libraries instead:
