@@ -4,7 +4,6 @@ using Platform.Locations.Application.Extensions;
 using Platform.Locations.HttpApi;
 using Platform.Locations.HttpApi.Extensions;
 using Platform.Locations.Infrastructure.Extensions;
-using Platform.Locations.SqlServer.Extensions;
 using Platform.Shared.Cqrs.Mediatr;
 using Serilog;
 

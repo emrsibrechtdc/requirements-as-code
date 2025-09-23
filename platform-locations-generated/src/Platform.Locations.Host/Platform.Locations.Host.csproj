@@ -20,7 +20,6 @@
     <ProjectReference Include="..\Locations\Platform.Locations.Application\Platform.Locations.Application.csproj" />
     <ProjectReference Include="..\Locations\Platform.Locations.Infrastructure\Platform.Locations.Infrastructure.csproj" />
     <ProjectReference Include="..\Locations\Platform.Locations.HttpApi\Platform.Locations.HttpApi.csproj" />
-    <ProjectReference Include="..\Locations\Platform.Locations.SqlServer\Platform.Locations.SqlServer.csproj" />
   </ItemGroup>
 
 </Project>

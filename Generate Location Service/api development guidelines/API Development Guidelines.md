@@ -46,8 +46,7 @@ The platform follows a clean architecture approach with the following layers:
 │   └── {ServiceName}/
 │       ├── Platform.{ServiceName}.HttpApi/             # HTTP API Layer
 │       ├── Platform.{ServiceName}.Application/         # Application Layer
-│       ├── Platform.{ServiceName}.Infrastructure/      # Infrastructure Layer
-│       ├── Platform.{ServiceName}.{DataStore}/         # Database Context
+│       ├── Platform.{ServiceName}.Infrastructure/      # Infrastructure Layer (includes DbContext, repositories, migrations)
 │       └── Platform.{ServiceName}.ApiClient/           # API Client
 └── test/
     ├── Core/

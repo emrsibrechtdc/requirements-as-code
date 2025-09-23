@@ -1,9 +1,9 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
-using Platform.Locations.Domain;
+using Platform.Locations.Application.Locations;
 using Platform.Locations.Domain.Locations;
 
-namespace Platform.Locations.SqlServer.Configurations;
+namespace Platform.Locations.Infrastructure.Configurations;
 
 public class LocationConfiguration : IEntityTypeConfiguration<Location>
 {

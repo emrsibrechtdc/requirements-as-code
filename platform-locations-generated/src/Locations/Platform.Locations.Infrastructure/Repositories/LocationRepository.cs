@@ -1,9 +1,9 @@
 using Microsoft.EntityFrameworkCore;
 using Platform.Locations.Domain.Locations;
-using Platform.Locations.SqlServer.Data;
+using Platform.Locations.Infrastructure.Data;
 using Platform.Shared.EntityFrameworkCore;
 
-namespace Platform.Locations.SqlServer.Repositories;
+namespace Platform.Locations.Infrastructure.Repositories;
 
 public class LocationRepository : EfCoreRepository<Location, Guid, LocationsDbContext>, ILocationRepository
 {

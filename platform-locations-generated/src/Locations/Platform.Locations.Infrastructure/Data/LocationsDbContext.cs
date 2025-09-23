@@ -1,10 +1,10 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Platform.Locations.Domain.Locations;
-using Platform.Locations.SqlServer.Configurations;
+using Platform.Locations.Infrastructure.Configurations;
 using Platform.Shared.EntityFrameworkCore;
 
-namespace Platform.Locations.SqlServer.Data;
+namespace Platform.Locations.Infrastructure.Data;
 
 public class LocationsDbContext : PlatformDbContext
 {

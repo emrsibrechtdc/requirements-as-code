@@ -1,8 +1,8 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
-using Platform.Locations.SqlServer.Data;
+using Platform.Locations.Infrastructure.Data;
 
-namespace Platform.Locations.SqlServer.Migrations;
+namespace Platform.Locations.Infrastructure.Migrations;
 
 [DbContext(typeof(LocationsDbContext))]
 partial class LocationsDbContextModelSnapshot : ModelSnapshot
