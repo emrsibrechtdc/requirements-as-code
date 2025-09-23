@@ -8,10 +8,10 @@ namespace Platform.Locations.Application.Locations.Queries;
 
 public class GetLocationsQueryHandler : IQueryHandler<GetLocationsQuery, List<LocationDto>>
 {
-    private readonly IReadRepository<Location, Guid> _repository;
+    private readonly ILocationRepository _repository;
     private readonly IMapper _mapper;
 
-    public GetLocationsQueryHandler(IReadRepository<Location, Guid> repository, IMapper mapper)
+    public GetLocationsQueryHandler(ILocationRepository repository, IMapper mapper)
     {
         _repository = repository;
         _mapper = mapper;

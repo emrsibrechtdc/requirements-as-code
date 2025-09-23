@@ -18,8 +18,8 @@ This LocationService implementation is designed to use the **Platform.Shared** l
 - Multi-product support architecture
 - Database schema and Entity Framework configuration
 
-✅ **Build Status**: 
-The solution now builds successfully with the following Platform packages from the coldchain-software artifact feed:
+✅ **Runtime Status**: 
+The solution now builds and runs successfully with the following Platform packages from the coldchain-software artifact feed:
 - **Platform.Shared** version 1.1.20250915.1
 - **Platform.Common.EventGrid** version 5.20250909.1501
 
@@ -42,6 +42,11 @@ The solution has been successfully updated to use the latest Platform.Shared ver
    - `EventGridMessageEnvelopePublisher` for publishing integration events to Azure EventGrid
    - `MessagePublisher` and `IMessageEnvelopePublisher` abstractions
    - Azure EventGrid client configuration with `AddAzureClients()`
+   - **EventGrid URL Configuration**: Required in appsettings.json for service registration
+9. **Platform.Shared Service Registration Requirements**: Critical service registrations discovered during implementation:
+   - **Manual Registration Required**: `IMultiProductRequestContextProvider` and `IRequestContextProvider` must be explicitly registered
+   - **Repository Pattern**: Use domain-specific repository interfaces (e.g., `ILocationRepository`) instead of Platform.Shared generic repositories (e.g., `IReadRepository<T, TId>`)
+   - **EventGrid Configuration**: EventGrid URL must be configured in appsettings.json for `IMessageEnvelopePublisher` registration
 
 ### Project Structure Updates
 - **Infrastructure Consolidation**: The Platform.Locations.SqlServer project has been consolidated into Platform.Locations.Infrastructure
@@ -61,6 +66,43 @@ The solution has been successfully updated to use the latest Platform.Shared ver
 - **EventGrid**: For `EventGridMessageEnvelopePublisher` implementation
 - **Platform.Shared.DataLayer**: For repository patterns and data layer abstractions
 - **Platform.Shared.IntegrationEvents**: For integration event interfaces and base classes
+
+### Runtime Service Registration Requirements
+
+**Critical Platform.Shared Services**: The following services require manual registration for proper Platform.Shared integration:
+
+1. **Context Providers** (must be registered explicitly):
+   ```csharp
+   // Required for multi-product data segregation and auditing
+   services.AddScoped<IMultiProductRequestContextProvider, YourImplementation>();
+   services.AddScoped<IRequestContextProvider, YourImplementation>();
+   ```
+
+2. **Repository Pattern**: Use domain-specific repository interfaces instead of Platform.Shared generics:
+   ```csharp
+   // ✅ Correct - Use domain repository interfaces
+   public class GetLocationsQueryHandler : IQueryHandler<GetLocationsQuery, List<LocationDto>>
+   {
+       private readonly ILocationRepository _repository; // Domain-specific interface
+   }
+   
+   // ❌ Incorrect - Platform.Shared generic repositories not auto-registered
+   private readonly IReadRepository<Location, Guid> _repository;
+   ```
+
+3. **EventGrid Configuration**: EventGrid URL must be configured in appsettings.json:
+   ```json
+   {
+     "EventGrid": {
+       "Url": "https://your-eventgrid-endpoint.com/api/events"
+     }
+   }
+   ```
+
+**Service Registration Order**: Platform.Shared services must be registered before dependent services:
+1. HttpApi project: `AddPlatformCommonHttpApi().WithAuditing().WithMultiProduct()`
+2. Application project: `AddIntegrationEventsServices()`
+3. Infrastructure project: Domain repositories and EventGrid setup
 
 ## Build Requirements
 

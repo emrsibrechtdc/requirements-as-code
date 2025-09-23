@@ -351,17 +351,19 @@ public class CreateEntityCommandHandler : ICommandHandler<CreateEntityCommand, E
 
 ### Query Pattern with Platform.Shared
 
+**⚠️ Important**: Use domain-specific repository interfaces instead of Platform.Shared generic repositories:
+
 ```csharp
-// Use Platform.Shared query interfaces
+// Use Platform.Shared query interfaces and domain repositories
 using Platform.Shared.Cqrs.Mediatr;
-using Platform.Shared.DataLayer.Repositories;
+using Platform.Locations.Domain.Locations; // Domain repository interface
 
 public record GetEntitiesQuery(string? EntityCode, string? EntityType) : IQuery<List<EntityDto>>
 { }
 
 public class GetEntitiesQueryHandler : IQueryHandler<GetEntitiesQuery, List<EntityDto>>
 {
-    private readonly IReadRepository<Entity, Guid> _repository; // Platform.Shared read repository
+    private readonly IEntityRepository _repository; // Use domain-specific repository interface
     private readonly IMapper _mapper;
 
     public async Task<List<EntityDto>> Handle(GetEntitiesQuery request, CancellationToken cancellationToken)
@@ -378,6 +380,13 @@ public class GetEntitiesQueryHandler : IQueryHandler<GetEntitiesQuery, List<Enti
         return _mapper.Map<List<EntityDto>>(entities);
     }
 }
+```
+
+**❌ Critical Error to Avoid**:
+```csharp
+// DON'T use Platform.Shared generic repositories - they are not auto-registered
+private readonly IReadRepository<Entity, Guid> _repository; // This will cause DI failures
+```
 ```
 
 **Platform.Shared Query Benefits:**
@@ -1132,6 +1141,15 @@ using Microsoft.Extensions.Azure;
 using Azure.Messaging.EventGrid;
 ```
 
+**Required Configuration**: EventGrid URL must be configured in appsettings.json:
+```json
+{
+  "EventGrid": {
+    "Url": "https://your-eventgrid-endpoint.eastus2-1.eventgrid.azure.net/api/events"
+  }
+}
+```
+
 ### Integration Event Handler Best Practices
 
 **✅ DO - Focus on Business Logic Only:**
@@ -1850,6 +1868,11 @@ The following changes are required when upgrading to Platform.Shared version 1.1
        services.AddPlatformCommonHttpApi(configuration, configurationBuilder, environment, "ServiceName")
               .WithAuditing()
               .WithMultiProduct();
+       
+       // CRITICAL: Register required context providers
+       services.AddScoped<IMultiProductRequestContextProvider, YourMultiProductProvider>();
+       services.AddScoped<IRequestContextProvider, YourRequestContextProvider>();
+       
        return services;
    }
    
@@ -1860,7 +1883,21 @@ The following changes are required when upgrading to Platform.Shared version 1.1
        // ... other services
        return services;
    }
+   
+   // Infrastructure Project Extension
+   public static IServiceCollection AddYourInfrastructure(this IServiceCollection services, string connectionString)
+   {
+       // Register domain-specific repositories (not Platform.Shared generics)
+       services.AddScoped<IEntityRepository, EntityRepository>();
+       
+       return services;
+   }
    ```
+
+**⚠️ Critical Service Registration Requirements**:
+- **Context Providers**: `IMultiProductRequestContextProvider` and `IRequestContextProvider` must be manually registered
+- **Repository Pattern**: Register domain-specific repository interfaces, not Platform.Shared generic repositories
+- **EventGrid Configuration**: EventGrid URL must be present in appsettings.json for service registration to succeed
 
 ### Dependencies
 
@@ -1917,9 +1954,13 @@ When implementing new APIs with Platform.Shared, ensure:
 - [ ] Configured Platform.Shared services in appropriate project extensions:
   - [ ] HttpApi project: `services.AddPlatformCommonHttpApi().WithAuditing().WithMultiProduct()`
   - [ ] Application project: `services.AddIntegrationEventsServices()`
+  - [ ] **CRITICAL**: Manually registered required context providers:
+    - [ ] `services.AddScoped<IMultiProductRequestContextProvider, YourImplementation>()`
+    - [ ] `services.AddScoped<IRequestContextProvider, YourImplementation>()`
 - [ ] Configured `TransactionBehavior` in MediatR pipeline
 - [ ] DbContext inherits from `PlatformDbContext`
 - [ ] Middleware sets product context via `IMultiProductRequestContextProvider`
+- [ ] **EventGrid Configuration**: Added EventGrid URL to appsettings.json
 
 ### Development
 - [ ] Commands/Queries use Platform.Shared CQRS interfaces:
@@ -1928,7 +1969,8 @@ When implementing new APIs with Platform.Shared, ensure:
   - [ ] Queries inherit from `IQuery<TResponse>`
   - [ ] Query handlers inherit from `IQueryHandler<TQuery, TResponse>`
 - [ ] Validators created using FluentValidation for input validation
-- [ ] Command/Query handlers use Platform.Shared repositories with automatic filtering
+- [ ] **CRITICAL**: Handlers use domain-specific repository interfaces (e.g., `ILocationRepository`)
+- [ ] **AVOID**: Do NOT use Platform.Shared generic repositories (`IReadRepository<T,TId>`) - not auto-registered
 - [ ] DTOs defined for requests and responses
 - [ ] AutoMapper profiles configured
 - [ ] Integration events inherit from Platform.Shared `IIntegrationEvent`
