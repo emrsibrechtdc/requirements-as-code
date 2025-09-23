@@ -1,4 +1,5 @@
 using Asp.Versioning;
+using Asp.Versioning.Builder;
 using MediatR;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -21,7 +22,7 @@ public static class EndpointRouteBuilderExtensions
 
         }).WithApiVersionSet(apiVersionSet)
               .MapToApiVersion(1.0)
-              .WithOpenApi(operation => new(operation) { Summary = "Register Locations endpoint" })
+              .WithSummary("Register Locations endpoint")
               .Produces<LocationResponse>(StatusCodes.Status200OK)
               .Produces<ProblemDetails>(StatusCodes.Status500InternalServerError)
               .Produces<ProblemDetails>(StatusCodes.Status401Unauthorized)
@@ -37,7 +38,7 @@ public static class EndpointRouteBuilderExtensions
 
         }).WithApiVersionSet(apiVersionSet)
               .MapToApiVersion(1.0)
-              .WithOpenApi(operation => new(operation) { Summary = "Update Location address endpoint" })
+              .WithSummary("Update Location address endpoint")
               .Produces<LocationResponse>(StatusCodes.Status200OK)
               .Produces<ProblemDetails>(StatusCodes.Status500InternalServerError)
               .Produces<ProblemDetails>(StatusCodes.Status401Unauthorized)
@@ -53,12 +54,8 @@ public static class EndpointRouteBuilderExtensions
 
         }).WithApiVersionSet(apiVersionSet)
               .MapToApiVersion(1.0)
-              .WithOpenApi(operation =>
-              {
-                  operation.Parameters[0].Description = "Get locations matched with starting characters of the Location Code. Minimum 3 characters are required to search for the locations. LocationCode is optional and if not provided then this endpoint will return all the locations associated with the consumer product.";
-                  operation.Summary = "Get Locations endpoint";
-                  return operation;
-              })
+              .WithSummary("Get Locations endpoint")
+              .WithDescription("Get locations matched with starting characters of the Location Code. Minimum 3 characters are required to search for the locations. LocationCode is optional and if not provided then this endpoint will return all the locations associated with the consumer product.")
               .Produces<List<LocationDto>>(StatusCodes.Status200OK)
               .Produces<ProblemDetails>(StatusCodes.Status500InternalServerError)
               .Produces<ProblemDetails>(StatusCodes.Status401Unauthorized)
@@ -74,7 +71,7 @@ public static class EndpointRouteBuilderExtensions
 
         }).WithApiVersionSet(apiVersionSet)
               .MapToApiVersion(1.0)
-              .WithOpenApi(operation => new(operation) { Summary = "Delete Location endpoint" })
+              .WithSummary("Delete Location endpoint")
               .Produces<LocationResponse>(StatusCodes.Status200OK)
               .Produces<LocationResponse>(StatusCodes.Status202Accepted)
               .Produces<ProblemDetails>(StatusCodes.Status500InternalServerError)
@@ -91,7 +88,7 @@ public static class EndpointRouteBuilderExtensions
 
         }).WithApiVersionSet(apiVersionSet)
               .MapToApiVersion(1.0)
-              .WithOpenApi(operation => new(operation) { Summary = "Activate Location endpoint" })
+              .WithSummary("Activate Location endpoint")
               .Produces<LocationResponse>(StatusCodes.Status200OK)
               .Produces<ProblemDetails>(StatusCodes.Status500InternalServerError)
               .Produces<ProblemDetails>(StatusCodes.Status401Unauthorized)
@@ -107,7 +104,7 @@ public static class EndpointRouteBuilderExtensions
 
         }).WithApiVersionSet(apiVersionSet)
               .MapToApiVersion(1.0)
-              .WithOpenApi(operation => new(operation) { Summary = "Deactivate Location endpoint" })
+              .WithSummary("Deactivate Location endpoint")
               .Produces<LocationResponse>(StatusCodes.Status200OK)
               .Produces<ProblemDetails>(StatusCodes.Status500InternalServerError)
               .Produces<ProblemDetails>(StatusCodes.Status401Unauthorized)

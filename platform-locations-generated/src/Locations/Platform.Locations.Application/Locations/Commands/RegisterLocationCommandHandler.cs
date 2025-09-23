@@ -3,7 +3,7 @@ using FluentValidation;
 using Platform.Locations.Application.Locations.Dtos;
 using Platform.Locations.Application.IntegrationEvents;
 using Platform.Locations.Domain.Locations;
-using Platform.Shared.Cqrs;
+using Platform.Shared.Cqrs.Mediatr;
 using Platform.Shared.IntegrationEvents;
 
 namespace Platform.Locations.Application.Locations.Commands;
@@ -54,7 +54,7 @@ public class RegisterLocationCommandHandler : ICommandHandler<RegisterLocationCo
         
         // Publish clean integration events (no product context in payload)
         // Product context automatically added to CloudEvents headers
-        _eventPublisher.AddIntegrationEvent(
+        _eventPublisher.SaveIntegrationEvent(
             new LocationRegisteredIntegrationEvent(
                 location.LocationCode, 
                 location.LocationTypeCode,
@@ -64,7 +64,7 @@ public class RegisterLocationCommandHandler : ICommandHandler<RegisterLocationCo
                 location.State,
                 location.ZipCode,
                 location.Country,
-                location.CreatedAt));
+                location.CreatedAt.DateTime));
         
         return _mapper.Map<LocationResponse>(location);
     }

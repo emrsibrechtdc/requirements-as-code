@@ -1,9 +1,8 @@
 using AutoMapper;
 using Platform.Locations.Application.Locations.Dtos;
-using Platform.Locations.Domain;
 using Platform.Locations.Domain.Locations;
-using Platform.Shared.Cqrs;
-using Platform.Shared.DataLayer;
+using Platform.Shared.Cqrs.Mediatr;
+using Platform.Shared.DataLayer.Repositories;
 
 namespace Platform.Locations.Application.Locations.Queries;
 

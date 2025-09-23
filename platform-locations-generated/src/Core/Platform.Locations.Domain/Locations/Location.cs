@@ -34,7 +34,7 @@ public class Location : FullyAuditedActivableAggregateRoot<Guid>, IMultiProductO
         State = state;
         ZipCode = zipCode;
         Country = country;
-        IsActive = true;
+        // IsActive will be set through base class initialization
     }
 
     // Static factory method with domain business logic

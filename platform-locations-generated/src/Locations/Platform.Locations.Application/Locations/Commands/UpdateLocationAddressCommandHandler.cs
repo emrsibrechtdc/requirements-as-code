@@ -3,7 +3,7 @@ using FluentValidation;
 using Platform.Locations.Application.Locations.Dtos;
 using Platform.Locations.Application.IntegrationEvents;
 using Platform.Locations.Domain.Locations;
-using Platform.Shared.Cqrs;
+using Platform.Shared.Cqrs.Mediatr;
 using Platform.Shared.IntegrationEvents;
 
 namespace Platform.Locations.Application.Locations.Commands;
@@ -54,7 +54,7 @@ public class UpdateLocationAddressCommandHandler : ICommandHandler<UpdateLocatio
         await _locationRepository.UpdateAsync(location, cancellationToken);
         
         // Publish integration event
-        _eventPublisher.AddIntegrationEvent(
+        _eventPublisher.SaveIntegrationEvent(
             new LocationAddressUpdatedIntegrationEvent(
                 location.LocationCode,
                 location.AddressLine1,
@@ -63,7 +63,7 @@ public class UpdateLocationAddressCommandHandler : ICommandHandler<UpdateLocatio
                 location.State,
                 location.ZipCode,
                 location.Country,
-                location.UpdatedAt ?? DateTime.UtcNow));
+                location.UpdatedAt?.DateTime ?? DateTime.UtcNow));
         
         return _mapper.Map<LocationResponse>(location);
     }

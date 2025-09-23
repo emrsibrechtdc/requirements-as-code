@@ -3,7 +3,7 @@ using FluentValidation;
 using Platform.Locations.Application.Locations.Dtos;
 using Platform.Locations.Application.IntegrationEvents;
 using Platform.Locations.Domain.Locations;
-using Platform.Shared.Cqrs;
+using Platform.Shared.Cqrs.Mediatr;
 using Platform.Shared.IntegrationEvents;
 
 namespace Platform.Locations.Application.Locations.Commands;
@@ -45,7 +45,7 @@ public class DeleteLocationCommandHandler : ICommandHandler<DeleteLocationComman
         await _locationRepository.DeleteAsync(location, cancellationToken);
         
         // Publish integration event
-        _eventPublisher.AddIntegrationEvent(
+        _eventPublisher.SaveIntegrationEvent(
             new LocationDeletedIntegrationEvent(
                 location.LocationCode,
                 DateTime.UtcNow));

@@ -5,7 +5,7 @@ using Platform.Locations.HttpApi;
 using Platform.Locations.HttpApi.Extensions;
 using Platform.Locations.Infrastructure.Extensions;
 using Platform.Locations.SqlServer.Extensions;
-using Platform.Shared.Cqrs;
+using Platform.Shared.Cqrs.Mediatr;
 using Serilog;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -14,20 +14,16 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Host.UseSerilog((context, configuration) => 
     configuration.ReadFrom.Configuration(context.Configuration));
 
-// Add Platform.Shared services
-builder.Services.AddPlatformCommonHttpApi(builder.Configuration, builder => { }, builder.Environment, "Locations");
-builder.Services.AddPlatformCommonAuditing();
-builder.Services.AddIntegrationEventsServices();
-builder.Services.AddMultiProductServices();
+// Platform.Shared services are now added in the respective extension methods
 
 // Add MediatR with transaction behavior
 builder.Services.AddMediatR(cfg => cfg.RegisterServicesFromAssembly(typeof(Program).Assembly));
-builder.Services.AddTransient(typeof(IPipelineBehavior<,>), typeof(TransactionBehavior<,>));
+// builder.Services.AddTransient(typeof(IPipelineBehavior<,>), typeof(TransactionBehavior<,>)); // TransactionBehavior may have moved
 
 // Add application services
 builder.Services.AddLocationApplication();
 builder.Services.AddLocationInfrastructure();
-builder.Services.AddLocationHttpApi();
+builder.Services.AddLocationHttpApi(builder.Configuration, (IConfigurationBuilder)builder.Configuration, builder.Environment);
 
 // Add data store
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection") 
@@ -78,7 +74,7 @@ if (string.IsNullOrEmpty(versionString))
 }
 var version = Version.Parse(versionString);
 ApiVersion apiVersion = new ApiVersion(version.Major, version.Minor);
-var versionSet = app.NewApiVersionSet().HasApiVersions(new ApiVersion[] { apiVersion }).ReportApiVersions().Build();
+var versionSet = app.NewApiVersionSet().HasApiVersion(apiVersion).ReportApiVersions().Build();
 
 // Determine if authorization is required (disabled in development)
 bool authorizationRequired = !app.Environment.IsDevelopment();
@@ -88,7 +84,6 @@ app.MapLocationApiRoutes(versionSet, authorizationRequired);
 
 // Health check endpoint
 app.MapGet("/health", () => Results.Ok(new { status = "healthy", timestamp = DateTime.UtcNow }))
-    .WithTags("Health")
-    .WithOpenApi();
+    .WithTags("Health");
 
 app.Run();

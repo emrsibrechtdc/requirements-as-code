@@ -1,4 +1,4 @@
-using Platform.Shared.DataLayer;
+using Platform.Shared.DataLayer.Repositories;
 
 namespace Platform.Locations.Domain.Locations;
 

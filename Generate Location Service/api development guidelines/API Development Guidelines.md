@@ -1,8 +1,8 @@
 # Copeland Platform API Development Guidelines
 
-> **Version:** 2.0  
-> **Last Updated:** 2025-09-17  
-> **Based on:** Clean Architecture principles, Copeland Platform standards, and Platform.Shared library
+> **Version:** 2.1  
+> **Last Updated:** 2025-09-23  
+> **Based on:** Clean Architecture principles, Copeland Platform standards, and Platform.Shared library v1.1.20250915.1
 
 This document outlines the comprehensive development standards and best practices for building RESTful APIs within the Copeland Platform ecosystem using the **Platform.Shared library**. These guidelines ensure consistency, maintainability, and scalability across all platform services while leveraging Platform.Shared's infrastructure capabilities for auditing, multi-product support, CQRS, and integration events.
 
@@ -171,7 +171,7 @@ public static IEndpointRouteBuilder Map{ServiceName}ApiRoutes(this IEndpointRout
 
     }).WithApiVersionSet(apiVersionSet)
           .MapToApiVersion(1.0)
-          .WithOpenApi(operation => new(operation) { Summary = "Create {Entity} endpoint" })
+          .WithSummary("Create {Entity} endpoint")
           .Produces<EntityResponse>(StatusCodes.Status200OK)
           .Produces<ProblemDetails>(StatusCodes.Status500InternalServerError)
           .Produces<ProblemDetails>(StatusCodes.Status401Unauthorized)
@@ -210,7 +210,7 @@ All endpoints must specify their possible response types:
 - [ ] Includes `CancellationToken` parameter
 - [ ] Uses MediatR `ISender` for command/query dispatch
 - [ ] Specifies API version with `MapToApiVersion()`
-- [ ] Includes OpenAPI summary with `WithOpenApi()`
+- [ ] Includes endpoint summary with `WithSummary()` and optional `WithDescription()`
 - [ ] Declares all possible response types with `Produces<>()`
 - [ ] Applies authorization rules when `authorizationRequired` is true
 
@@ -220,10 +220,12 @@ All endpoints must specify their possible response types:
 
 ### Command Pattern with Platform.Shared
 
-Commands represent write operations and should use **Platform.Shared CQRS interfaces**:
+Commands represent write operations and should use **Platform.Shared CQRS interfaces** from the `Platform.Shared.Cqrs.Mediatr` namespace:
 
 ```csharp
-// Use Platform.Shared CQRS interfaces
+// Use Platform.Shared CQRS interfaces from Platform.Shared.Cqrs.Mediatr
+using Platform.Shared.Cqrs.Mediatr;
+
 public record CreateEntityCommand(
     string EntityCode,
     string EntityType,
@@ -251,6 +253,9 @@ public record CreateEntityCommand(
 
 ```csharp
 // Use Platform.Shared interfaces and infrastructure
+using Platform.Shared.Cqrs.Mediatr;
+using Platform.Shared.DataLayer.Repositories;
+
 public class CreateEntityCommandHandler : ICommandHandler<CreateEntityCommand, EntityResponse>
 {
     private readonly IRepository<Entity, Guid> _entityRepository; // Platform.Shared repository
@@ -277,7 +282,7 @@ public class CreateEntityCommandHandler : ICommandHandler<CreateEntityCommand, E
         
         // Publish clean integration events (no product context in payload)
         // Product context automatically added to CloudEvents headers
-        _eventPublisher.AddIntegrationEvent(
+        _eventPublisher.SaveIntegrationEvent(
             new EntityCreatedIntegrationEvent(entity.EntityCode, entity.Name));
         
         return _mapper.Map<EntityResponse>(entity);
@@ -316,6 +321,9 @@ public class CreateEntityCommandHandler : ICommandHandler<CreateEntityCommand, E
 
 ```csharp
 // Use Platform.Shared query interfaces
+using Platform.Shared.Cqrs.Mediatr;
+using Platform.Shared.DataLayer.Repositories;
+
 public record GetEntitiesQuery(string? EntityCode, string? EntityType) : IQuery<List<EntityDto>>
 { }
 
@@ -944,7 +952,7 @@ Platform.Shared implements integration events using the **CloudEvents standard**
 
 ```csharp
 // Use Platform.Shared event publisher
-_eventPublisher.AddIntegrationEvent(
+_eventPublisher.SaveIntegrationEvent(
     new EntityCreatedIntegrationEvent(entity.EntityCode, entity.Name));
 
 // Platform.Shared automatically:
@@ -1150,7 +1158,7 @@ if (string.IsNullOrEmpty(versionString))
 }
 var version = Version.Parse(versionString);
 ApiVersion apiVersion = new ApiVersion(version.Major, version.Minor);
-var versionSet = app.NewApiVersionSet().HasApiVersions(new ApiVersion[] { apiVersion }).ReportApiVersions().Build();
+var versionSet = app.NewApiVersionSet().HasApiVersion(apiVersion).ReportApiVersions().Build();
 ```
 
 ### Endpoint Versioning
@@ -1173,19 +1181,15 @@ var versionSet = app.NewApiVersionSet().HasApiVersions(new ApiVersion[] { apiVer
 ### Endpoint Documentation
 
 ```csharp
-.WithOpenApi(operation => new(operation) { Summary = "Create Entity endpoint" })
+.WithSummary("Create Entity endpoint")
 ```
 
 ### Enhanced Documentation
 
 ```csharp
-.WithOpenApi(operation =>
-{
-    operation.Parameters[0].Description = "Filter entities by code. Minimum 3 characters required for search. " +
-                                          "Optional parameter - if not provided, returns all entities for the product.";
-    operation.Summary = "Get Entities endpoint";
-    return operation;
-})
+.WithSummary("Get Entities endpoint")
+.WithDescription("Filter entities by code. Minimum 3 characters required for search. " +
+                "Optional parameter - if not provided, returns all entities for the product.")
 ```
 
 **Documentation Standards:**
@@ -1666,6 +1670,133 @@ Each repository must include:
 
 ---
 
+## Platform.Shared v1.1.20250915.1 Migration Guide
+
+The following changes are required when upgrading to Platform.Shared version 1.1.20250915.1:
+
+### Namespace Updates
+
+1. **CQRS Interfaces**:
+   ```csharp
+   // OLD
+   using Platform.Shared.Cqrs;
+   
+   // NEW
+   using Platform.Shared.Cqrs.Mediatr;
+   ```
+
+2. **Repository Interfaces**:
+   ```csharp
+   // OLD
+   using Platform.Shared.DataLayer;
+   
+   // NEW
+   using Platform.Shared.DataLayer.Repositories;
+   ```
+
+### API Method Changes
+
+3. **Integration Events Publisher**:
+   ```csharp
+   // OLD
+   _eventPublisher.AddIntegrationEvent(eventObject);
+   
+   // NEW (now synchronous)
+   _eventPublisher.SaveIntegrationEvent(eventObject);
+   ```
+
+4. **OpenAPI Documentation**:
+   ```csharp
+   // OLD
+   .WithOpenApi(operation => new(operation) { Summary = "Description" })
+   
+   // NEW
+   .WithSummary("Description")
+   .WithDescription("Detailed description") // optional
+   ```
+
+5. **API Versioning**:
+   ```csharp
+   // OLD
+   .HasApiVersions(new ApiVersion[] { apiVersion })
+   
+   // NEW
+   .HasApiVersion(apiVersion)
+   ```
+
+### Database Context Changes
+
+6. **PlatformDbContext Constructor**:
+   ```csharp
+   // NEW - Requires ILogger injection
+   public YourDbContext(DbContextOptions<YourDbContext> options, ILogger<YourDbContext> logger) 
+       : base(options, logger)
+   {
+   }
+   ```
+
+7. **Repository Entity Access**:
+   ```csharp
+   // OLD (method no longer available)
+   return await GetQueryable().FirstOrDefaultAsync(...);
+   
+   // NEW
+   return await DbContext.Set<Entity>().FirstOrDefaultAsync(...);
+   ```
+
+### Service Registration Changes
+
+8. **Platform.Shared Services Organization**:
+   ```csharp
+   // HttpApi Project Extension
+   public static IServiceCollection AddYourHttpApi(this IServiceCollection services, 
+       IConfiguration configuration, IConfigurationBuilder configurationBuilder, IWebHostEnvironment environment)
+   {
+       services.AddPlatformCommonHttpApi(configuration, configurationBuilder, environment, "ServiceName")
+              .WithAuditing()
+              .WithMultiProduct();
+       return services;
+   }
+   
+   // Application Project Extension
+   public static IServiceCollection AddYourApplication(this IServiceCollection services)
+   {
+       services.AddIntegrationEventsServices();
+       // ... other services
+       return services;
+   }
+   ```
+
+### Dependencies
+
+9. **FluentValidation Extension**:
+   ```xml
+   <!-- Add to Application project -->
+   <PackageReference Include="FluentValidation.DependencyInjectionExtensions" Version="11.9.0" />
+   ```
+
+### Domain Model Updates
+
+10. **Entity IsActive Property**:
+    ```csharp
+    // OLD - Direct assignment causes compilation error
+    entity.IsActive = true;
+    
+    // NEW - IsActive is now read-only, use methods
+    entity.Activate();
+    entity.Deactivate();
+    ```
+
+### Breaking Changes Summary
+
+- **Integration events are now synchronous** - remove `await` from `SaveIntegrationEvent()` calls
+- **Database context requires ILogger** - update constructors and DI registration
+- **Repository entity access changed** - use `DbContext.Set<T>()` instead of `GetQueryable()`
+- **Namespace reorganization** - update using statements for CQRS and repository interfaces
+- **OpenAPI methods renamed** - replace `WithOpenApi()` with `WithSummary()`/`WithDescription()`
+
+---
+
 ## Implementation Checklist
 
 When implementing new APIs with Platform.Shared, ensure:
@@ -1688,11 +1819,9 @@ When implementing new APIs with Platform.Shared, ensure:
 
 ### Platform.Shared Integration
 - [ ] Added Platform.Shared NuGet package reference
-- [ ] Configured Platform.Shared services in DI container:
-  - [ ] `services.AddPlatformCommonHttpApi()`
-  - [ ] `services.AddPlatformCommonAuditing()`
-  - [ ] `services.AddIntegrationEventsServices()`
-  - [ ] `services.AddMultiProductServices()`
+- [ ] Configured Platform.Shared services in appropriate project extensions:
+  - [ ] HttpApi project: `services.AddPlatformCommonHttpApi().WithAuditing().WithMultiProduct()`
+  - [ ] Application project: `services.AddIntegrationEventsServices()`
 - [ ] Configured `TransactionBehavior` in MediatR pipeline
 - [ ] DbContext inherits from `PlatformDbContext`
 - [ ] Middleware sets product context via `IMultiProductRequestContextProvider`
@@ -1725,7 +1854,7 @@ When implementing new APIs with Platform.Shared, ensure:
 - [ ] External system validation in command handlers
 - [ ] **No manual product context handling** - Platform.Shared handles automatically
 - [ ] **No manual audit field setting** - Platform.Shared handles automatically
-- [ ] Use Platform.Shared `IIntegrationEventPublisher.AddIntegrationEvent()`
+- [ ] Use Platform.Shared `IIntegrationEventPublisher.SaveIntegrationEvent()` (synchronous)
 
 ### API Layer
 - [ ] Minimal API endpoints registered
