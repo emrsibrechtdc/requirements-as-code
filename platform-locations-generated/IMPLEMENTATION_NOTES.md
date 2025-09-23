@@ -50,9 +50,14 @@ The solution has been successfully updated to use the latest Platform.Shared ver
 
 ### Project Structure Updates
 - **Infrastructure Consolidation**: The Platform.Locations.SqlServer project has been consolidated into Platform.Locations.Infrastructure
-  - All Entity Framework configurations, repositories, DbContext, and migrations moved to Infrastructure project
+  - All Entity Framework configurations, repositories, and DbContext moved to Infrastructure project
   - SqlServer project removed from solution
   - Namespace references updated throughout the solution
+- **Database Schema Management**: Migrated from EF Core migrations to SQL Database Project approach
+  - Created Platform.Locations.Database project using MSBuild.Sdk.SqlProj
+  - Removed EF Core migrations in favor of declarative schema management
+  - Sample data uses `NEWSEQUENTIALID()` for optimal database performance
+  - DACPAC-based deployment for enterprise-grade schema management
 
 ### Dependencies Added
 - `FluentValidation.DependencyInjectionExtensions` v11.9.0

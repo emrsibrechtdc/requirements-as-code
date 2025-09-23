@@ -46,11 +46,12 @@ Platform.Locations/
 │   ├── Platform.Locations.Host/                    # Web API Host
 │   ├── Core/
 │   │   └── Platform.Locations.Domain/              # Domain Layer
+│   ├── Database/
+│   │   └── Platform.Locations.Database/            # SQL Database Project
 │   └── Locations/
 │       ├── Platform.Locations.HttpApi/             # HTTP API Layer
 │       ├── Platform.Locations.Application/         # Application Layer
-│       ├── Platform.Locations.Infrastructure/      # Infrastructure Layer
-│       └── Platform.Locations.SqlServer/           # SQL Server Data Store
+│       └── Platform.Locations.Infrastructure/      # Infrastructure Layer
 └── test/ (to be created)
     ├── Core/
     │   └── Platform.Locations.Domain.UnitTests/
@@ -121,9 +122,16 @@ The solution includes a comprehensive `.gitignore` file that excludes:
    dotnet build
    ```
 
-3. **Update database (apply migrations)**
+3. **Deploy database schema**
    ```bash
-   dotnet ef database update --project src/Locations/Platform.Locations.SqlServer --startup-project src/Platform.Locations.Host
+   # Build database project
+   dotnet build src/Database/Platform.Locations.Database/Platform.Locations.Database.sqlproj
+   
+   # Install SqlPackage tool (if not already installed)
+   dotnet tool install -g microsoft.sqlpackage
+   
+   # Deploy to local database
+   SqlPackage.exe /Action:Publish /SourceFile:"src/Database/Platform.Locations.Database/bin/Debug/Platform.Locations.Database.dacpac" /TargetServerName:"(localdb)\\mssqllocaldb" /TargetDatabaseName:"Platform.Locations"
    ```
 
 4. **Run the service**
@@ -244,17 +252,20 @@ Events are published with product context in CloudEvents headers for proper rout
 ## Database Schema
 
 The Location entity includes:
+- **Primary Key**: Id (uniqueidentifier with NEWSEQUENTIALID() for optimal performance)
 - **Business Properties**: LocationCode, LocationTypeCode, Address fields
 - **Platform.Shared Auditing**: CreatedAt, CreatedBy, UpdatedAt, UpdatedBy, DeletedAt, DeletedBy
 - **Multi-Product Support**: Product field for data segregation
 - **Activation State**: IsActive flag for activate/deactivate operations
 
 Key indexes:
-- Unique index on LocationCode (globally unique)
+- Primary clustered index on Id (sequential GUID for optimal performance)
 - Unique composite index on (Product, LocationCode)
 - Index on Product for multi-tenant queries
 - Index on LocationTypeCode for filtering
 - Index on IsActive for activation state queries
+
+**Performance Optimization**: The database uses `NEWSEQUENTIALID()` for generating primary key values, which provides better index performance compared to random GUIDs by reducing page splits and improving clustering efficiency.
 
 ## Error Handling
 

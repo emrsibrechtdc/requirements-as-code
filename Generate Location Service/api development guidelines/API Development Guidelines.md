@@ -27,8 +27,9 @@ This document outlines the comprehensive development standards and best practice
 15. [OpenAPI Documentation](#openapi-documentation)
 16. [Logging & Monitoring](#logging--monitoring)
 17. [Code Quality & Style Guidelines](#code-quality--style-guidelines)
-18. [NuGet Package Configuration](#nuget-package-configuration)
-19. [Source Control Management](#source-control-management)
+18. [Database Project Management](#database-project-management)
+19. [NuGet Package Configuration](#nuget-package-configuration)
+20. [Source Control Management](#source-control-management)
 
 ---
 
@@ -1377,7 +1378,399 @@ public CreateEntityCommandHandler(
 
 ---
 
-## 18. NuGet Package Configuration
+## 18. Database Project Management
+
+### Database-First Approach with SQL Projects
+
+For enterprise-grade database schema management, use **SQL Database Projects** instead of Entity Framework migrations. This approach provides better version control, declarative state management, and professional deployment capabilities.
+
+### Project Structure Integration
+
+Add a Database project to your solution structure:
+
+```plaintext
+├── src/
+│   ├── Platform.{ServiceName}.Host/                    # Web API Host
+│   ├── Core/
+│   │   └── Platform.{ServiceName}.Domain/              # Domain Layer
+│   ├── Database/
+│   │   └── Platform.{ServiceName}.Database/            # SQL Database Project ⭐
+│   └── {ServiceName}/
+│       ├── Platform.{ServiceName}.HttpApi/             # HTTP API Layer
+│       ├── Platform.{ServiceName}.Application/         # Application Layer
+│       └── Platform.{ServiceName}.Infrastructure/      # Infrastructure Layer (EF Core without migrations)
+```
+
+### Database Project Setup
+
+#### 1. Create SQL Database Project
+
+```xml
+<!-- Platform.{ServiceName}.Database.sqlproj -->
+<Project Sdk="MSBuild.Sdk.SqlProj/3.2.0">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <SqlServerVersion>SqlServer160</SqlServerVersion>
+    <IncludeCompositeObjects>True</IncludeCompositeObjects>
+    <DSP>Microsoft.Data.Tools.Schema.Sql.Sql160DatabaseSchemaProvider</DSP>
+    <ModelCollation>1033, CI</ModelCollation>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PostDeploy Include="Data\PostDeployment.sql" />
+  </ItemGroup>
+</Project>
+```
+
+#### 2. Database Project Structure
+
+```plaintext
+Platform.{ServiceName}.Database/
+├── Tables/
+│   ├── {EntityName}s.sql               # Table definitions
+│   └── {AdditionalEntity}s.sql
+├── Data/
+│   ├── Sample{EntityName}s.sql         # Sample data scripts
+│   └── PostDeployment.sql              # Post-deployment script
+├── Security/
+│   └── Schemas.sql                     # Schema definitions
+├── Indexes/
+│   └── {EntityName}_Indexes.sql        # Additional indexes (if needed)
+└── README.md                           # Database project documentation
+```
+
+### Database Schema Standards
+
+#### 1. Table Definition Template
+
+```sql
+-- Tables/{EntityName}s.sql
+CREATE TABLE [dbo].[{EntityName}s]
+(
+    [Id] UNIQUEIDENTIFIER NOT NULL DEFAULT NEWSEQUENTIALID(),
+    [Product] NVARCHAR(50) NOT NULL,
+    
+    -- Business Properties
+    [{EntityName}Code] NVARCHAR(50) NOT NULL,
+    [{EntityName}Type] NVARCHAR(20) NOT NULL,
+    [Name] NVARCHAR(200) NOT NULL,
+    [Description] NVARCHAR(500) NULL,
+    
+    -- Platform.Shared Audit Fields
+    [CreatedAt] DATETIME2 NOT NULL DEFAULT GETUTCDATE(),
+    [CreatedBy] NVARCHAR(100) NOT NULL DEFAULT 'system',
+    [UpdatedAt] DATETIME2 NULL,
+    [UpdatedBy] NVARCHAR(100) NULL,
+    [DeletedAt] DATETIME2 NULL,
+    [DeletedBy] NVARCHAR(100) NULL,
+    
+    -- Activation State
+    [IsActive] BIT NOT NULL DEFAULT 1,
+    
+    CONSTRAINT [PK_{EntityName}s] PRIMARY KEY CLUSTERED ([Id] ASC)
+);
+GO
+
+-- Indexes for Platform.Shared Multi-Product Support
+CREATE UNIQUE NONCLUSTERED INDEX [IX_{EntityName}s_Product_{EntityName}Code] ON [dbo].[{EntityName}s] 
+(
+    [Product] ASC, [{EntityName}Code] ASC
+) WHERE [DeletedAt] IS NULL;
+GO
+
+CREATE NONCLUSTERED INDEX [IX_{EntityName}s_Product_IsActive] ON [dbo].[{EntityName}s] 
+(
+    [Product] ASC, [IsActive] ASC
+) INCLUDE ([{EntityName}Code], [Name]) WHERE [DeletedAt] IS NULL;
+GO
+
+CREATE NONCLUSTERED INDEX [IX_{EntityName}s_Product_{EntityName}Type] ON [dbo].[{EntityName}s] 
+(
+    [Product] ASC, [{EntityName}Type] ASC
+) WHERE [DeletedAt] IS NULL;
+GO
+```
+
+#### 2. Database Design Standards
+
+**Primary Key Design:**
+- Use `UNIQUEIDENTIFIER` with `NEWSEQUENTIALID()` as default
+- **Performance Benefit**: Sequential GUIDs reduce page splits and improve clustering efficiency
+- **Global Uniqueness**: Suitable for distributed systems and data replication
+
+```sql
+[Id] UNIQUEIDENTIFIER NOT NULL DEFAULT NEWSEQUENTIALID()
+```
+
+**Platform.Shared Integration Fields:**
+- Always include `Product` field for multi-product data segregation
+- Include full audit trail fields for Platform.Shared auditing support
+- Use `IsActive` for soft activation/deactivation functionality
+- Use `DeletedAt`/`DeletedBy` for soft delete functionality
+
+**Indexing Strategy:**
+- **Primary Access Pattern**: Create composite indexes starting with `Product` field
+- **Unique Constraints**: Use `WHERE [DeletedAt] IS NULL` to exclude soft-deleted records
+- **Include Columns**: Add frequently accessed columns to covering indexes
+- **Filter Indexes**: Use filtered indexes to improve query performance on active records
+
+#### 3. Sample Data Standards
+
+```sql
+-- Data/Sample{EntityName}s.sql
+-- Sample data for development and testing environments
+-- Uses NEWSEQUENTIALID() for optimal performance
+
+IF NOT EXISTS (SELECT 1 FROM [dbo].[{EntityName}s] WHERE [{EntityName}Code] = 'SAMPLE-001')
+BEGIN
+    INSERT INTO [dbo].[{EntityName}s] 
+        ([Id], [Product], [{EntityName}Code], [{EntityName}Type], [Name], [Description], [IsActive], [CreatedAt], [CreatedBy])
+    VALUES
+        -- Active samples
+        (NEWSEQUENTIALID(), 'ProductA', 'PA-SAMPLE-001', 'TYPE1', 'Sample Entity A1', 'Description for sample', 1, GETUTCDATE(), 'system'),
+        (NEWSEQUENTIALID(), 'ProductA', 'PA-SAMPLE-002', 'TYPE2', 'Sample Entity A2', NULL, 1, GETUTCDATE(), 'system'),
+        
+        -- Product B samples
+        (NEWSEQUENTIALID(), 'ProductB', 'PB-SAMPLE-001', 'TYPE1', 'Sample Entity B1', 'Description for B1', 1, GETUTCDATE(), 'system'),
+        (NEWSEQUENTIALID(), 'ProductB', 'PB-SAMPLE-002', 'TYPE2', 'Sample Entity B2', NULL, 1, GETUTCDATE(), 'system'),
+        
+        -- Inactive sample
+        (NEWSEQUENTIALID(), 'ProductA', 'PA-INACTIVE-001', 'TYPE1', 'Inactive Sample', 'This is inactive', 0, GETUTCDATE(), 'system');
+END
+GO
+```
+
+**Sample Data Guidelines:**
+- Use `NEWSEQUENTIALID()` for ID generation (consistent with table default)
+- Include data for multiple products to test multi-product segregation
+- Include both active and inactive examples
+- Use conditional INSERT to prevent duplicate data on multiple runs
+- Always end SQL batches with `GO` statement
+
+### Database Project Build and Deployment
+
+#### 1. Local Development Build
+
+```bash
+# Build the database project (creates DACPAC)
+dotnet build src/Database/Platform.{ServiceName}.Database/Platform.{ServiceName}.Database.sqlproj
+
+# The output DACPAC will be in:
+# src/Database/Platform.{ServiceName}.Database/bin/Debug/Platform.{ServiceName}.Database.dacpac
+```
+
+#### 2. Local Database Deployment
+
+```bash
+# Install SqlPackage tool (if not already installed)
+dotnet tool install -g microsoft.sqlpackage
+
+# Deploy to local database
+SqlPackage.exe /Action:Publish ^
+    /SourceFile:"src/Database/Platform.{ServiceName}.Database/bin/Debug/Platform.{ServiceName}.Database.dacpac" ^
+    /TargetServerName:"(localdb)\mssqllocaldb" ^
+    /TargetDatabaseName:"Platform.{ServiceName}"
+```
+
+#### 3. Infrastructure Project Integration
+
+Update your Infrastructure project to work with the database schema without migrations:
+
+```csharp
+// Infrastructure/Data/{ServiceName}DbContext.cs
+public class {ServiceName}DbContext : PlatformDbContext
+{
+    public {ServiceName}DbContext(DbContextOptions<{ServiceName}DbContext> options, ILogger<{ServiceName}DbContext> logger) 
+        : base(options, logger)
+    {
+    }
+
+    public DbSet<{EntityName}> {EntityName}s { get; set; } = null!;
+
+    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    {
+        base.OnModelCreating(modelBuilder); // Platform.Shared configuration
+        
+        // Configure entities to match database schema
+        // No migrations needed - schema managed by SQL project
+        modelBuilder.Entity<{EntityName}>(entity =>
+        {
+            entity.ToTable("{EntityName}s");
+            entity.HasKey(e => e.Id);
+            
+            // Configure properties to match database schema
+            entity.Property(e => e.{EntityName}Code).HasMaxLength(50).IsRequired();
+            entity.Property(e => e.Name).HasMaxLength(200).IsRequired();
+            entity.Property(e => e.Description).HasMaxLength(500);
+            
+            // Indexes are defined in SQL project - no need to define here
+        });
+    }
+}
+```
+
+**Important**: Remove Entity Framework migrations from the Infrastructure project when using SQL Database Projects. The database schema is managed declaratively by the SQL project.
+
+### Migration from EF Migrations to SQL Projects
+
+#### 1. Extract Current Schema
+
+```bash
+# Generate SQL script from existing migrations
+dotnet ef migrations script --startup-project src/Platform.{ServiceName}.Host --project src/{ServiceName}/Platform.{ServiceName}.Infrastructure --output schema.sql
+```
+
+#### 2. Create SQL Project Structure
+
+- Create SQL Database Project using MSBuild.Sdk.SqlProj
+- Convert generated schema script into table definition files
+- Add appropriate indexes and constraints
+- Create sample data scripts
+
+#### 3. Update Infrastructure Project
+
+```csharp
+// Remove migrations folder and EF Design package
+// Update DbContext to configure entities without migrations
+// Keep repository implementations unchanged
+```
+
+#### 4. Update Project References
+
+```xml
+<!-- Remove from Infrastructure project -->
+<!-- <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="8.0.0" /> -->
+
+<!-- Add to solution file -->
+<Project Include="src\Database\Platform.{ServiceName}.Database\Platform.{ServiceName}.Database.sqlproj" />
+```
+
+### Database Project Benefits
+
+#### 1. Enterprise-Grade Schema Management
+- **Declarative State Management**: Database schema is defined as desired end state
+- **Version Control Integration**: SQL files are easily versioned and diffed
+- **Professional Deployment**: DACPAC-based deployment with rollback capabilities
+- **Schema Drift Detection**: Tools can detect differences between expected and actual schema
+
+#### 2. Development Workflow Improvements
+- **Database-First Development**: Schema changes drive entity model updates
+- **Team Collaboration**: SQL changes are clearly visible in pull requests
+- **CI/CD Integration**: Automated database deployments with SqlPackage
+- **Environment Consistency**: Same schema deployed to all environments
+
+#### 3. Performance Optimization
+- **Sequential GUID Primary Keys**: Better clustering and reduced page splits
+- **Optimized Indexing**: Indexes designed for specific access patterns
+- **Platform.Shared Integration**: Indexes optimized for multi-product queries
+- **Query Performance**: Covering indexes for common query patterns
+
+### Database Project Documentation
+
+#### README.md Template
+
+```markdown
+# Platform.{ServiceName}.Database
+
+This is the database project for the Platform.{ServiceName} service, using MSBuild.Sdk.SqlProj for database schema management.
+
+## Overview
+
+This project uses a **database-first** approach with SQL Server Database Projects instead of Entity Framework migrations.
+
+## Building and Deployment
+
+### Local Development
+```bash
+# Build database project
+dotnet build Platform.{ServiceName}.Database.sqlproj
+
+# Deploy to local database  
+SqlPackage.exe /Action:Publish /SourceFile:"bin/Debug/Platform.{ServiceName}.Database.dacpac" /TargetServerName:"(localdb)\mssqllocaldb" /TargetDatabaseName:"Platform.{ServiceName}"
+```
+
+## Database Schema
+
+### {EntityName}s Table
+- **Primary Key**: `Id` (uniqueidentifier with `NEWSEQUENTIALID()` default)
+- **Multi-Product Support**: `Product` (nvarchar(50))
+- **Business Key**: `{EntityName}Code` (nvarchar(50))
+- **Platform.Shared Auditing**: Full audit trail with soft delete support
+
+### Performance Optimizations
+- Sequential GUID primary keys for optimal clustering
+- Filtered indexes for active records only
+- Composite indexes starting with Product field
+- Covering indexes for common query patterns
+
+## Sample Data
+
+Sample data uses `NEWSEQUENTIALID()` for optimal database performance and includes examples for multiple products.
+```
+
+### Best Practices
+
+#### 1. SQL Code Standards
+- Use square brackets for all object names: `[dbo].[TableName]`
+- Always end batches with `GO` statement
+- Use `NEWSEQUENTIALID()` for UNIQUEIDENTIFIER primary keys
+- Include `WHERE [DeletedAt] IS NULL` in filtered indexes
+- Use consistent naming conventions: PascalCase for objects
+
+#### 2. Index Design Guidelines
+- **Multi-Product Indexes**: Always start composite indexes with `Product` field
+- **Unique Constraints**: Filter out soft-deleted records with `WHERE [DeletedAt] IS NULL`
+- **Covering Indexes**: Include frequently accessed columns to avoid key lookups
+- **Filtered Indexes**: Use for common query patterns (e.g., active records only)
+
+#### 3. Development Process
+- **Build Locally First**: Always build SQL project before committing changes
+- **Test with Sample Data**: Verify schema changes work with sample data
+- **Version Schema Changes**: Include database changes in same commit as entity changes
+- **Document Changes**: Update README with significant schema changes
+
+### CI/CD Integration
+
+#### Azure DevOps Pipeline
+
+```yaml
+# Build database project
+- task: DotNetCoreCLI@2
+  displayName: 'Build Database Project'
+  inputs:
+    command: 'build'
+    projects: 'src/Database/**/*.sqlproj'
+
+# Deploy database (staging/production)
+- task: SqlAzureDacpacDeployment@1
+  displayName: 'Deploy Database Schema'
+  inputs:
+    azureSubscription: '$(AzureSubscription)'
+    ServerName: '$(DatabaseServer)'
+    DatabaseName: '$(DatabaseName)'
+    SqlUsername: '$(DatabaseUser)'
+    SqlPassword: '$(DatabasePassword)'
+    DacpacFile: 'src/Database/**/bin/Debug/*.dacpac'
+    AdditionalArguments: '/p:BlockOnPossibleDataLoss=false'
+```
+
+#### GitHub Actions
+
+```yaml
+- name: Build Database Project
+  run: dotnet build src/Database/**/*.sqlproj
+
+- name: Deploy Database
+  run: |
+    SqlPackage.exe /Action:Publish \
+      /SourceFile:"src/Database/bin/Debug/*.dacpac" \
+      /TargetConnectionString:"${{ secrets.DATABASE_CONNECTION_STRING }}" \
+      /p:BlockOnPossibleDataLoss=false
+```
+
+---
+
+## 19. NuGet Package Configuration
 
 ### Platform.Shared Package Source
 
@@ -1939,6 +2332,21 @@ When implementing new APIs with Platform.Shared, ensure:
 - [ ] Repository interfaces use Platform.Shared abstractions (`IRepository<TEntity, TId>`)
 - [ ] Exception classes inherit from Platform.Shared `BusinessException`
 - [ ] Constants defined
+
+### Database Project Setup
+- [ ] SQL Database Project created using MSBuild.Sdk.SqlProj
+- [ ] Database project added to solution structure under `src/Database/`
+- [ ] Table definitions use `NEWSEQUENTIALID()` for primary keys
+- [ ] Platform.Shared integration fields included (Product, audit fields, IsActive, soft delete)
+- [ ] Indexes optimized for multi-product queries (composite indexes starting with Product)
+- [ ] Filtered indexes exclude soft-deleted records (`WHERE [DeletedAt] IS NULL`)
+- [ ] Sample data scripts created using `NEWSEQUENTIALID()` for optimal performance
+- [ ] Sample data includes multiple products for testing data segregation
+- [ ] All SQL batches end with `GO` statements
+- [ ] Database project README.md created with build and deployment instructions
+- [ ] Entity Framework migrations removed from Infrastructure project
+- [ ] DbContext configured to work without migrations (entities match SQL schema)
+- [ ] Microsoft.EntityFrameworkCore.Design package removed from Infrastructure project
 
 ### NuGet Package Configuration
 - [ ] `NuGet.Config` file created at solution root
