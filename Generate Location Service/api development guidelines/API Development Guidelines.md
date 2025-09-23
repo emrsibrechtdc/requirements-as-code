@@ -27,7 +27,8 @@ This document outlines the comprehensive development standards and best practice
 15. [OpenAPI Documentation](#openapi-documentation)
 16. [Logging & Monitoring](#logging--monitoring)
 17. [Code Quality & Style Guidelines](#code-quality--style-guidelines)
-18. [Source Control Management](#source-control-management)
+18. [NuGet Package Configuration](#nuget-package-configuration)
+19. [Source Control Management](#source-control-management)
 
 ---
 
@@ -1277,7 +1278,208 @@ public CreateEntityCommandHandler(
 
 ---
 
-## 18. Source Control Management
+## 18. NuGet Package Configuration
+
+### Platform.Shared Package Source
+
+All Platform API projects require access to the **Platform.Shared** library, which is hosted in a private Azure DevOps Artifacts feed. Proper NuGet configuration is essential for package restoration and build success.
+
+### Required NuGet Package Source
+
+**Artifact Feed**: `coldchain-software`  
+**URL**: `https://pkgs.dev.azure.com/DigitalAndConnectedTechnologies/_packaging/coldchain-software/nuget/v3/index.json`
+
+### NuGet.Config File
+
+Every solution **must** include a `NuGet.Config` file at the solution root with the following configuration:
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<configuration>
+  <packageSources>
+    <clear />
+    <add key="nuget.org" value="https://api.nuget.org/v3/index.json" protocolVersion="3" />
+    <add key="coldchain-software" value="https://pkgs.dev.azure.com/DigitalAndConnectedTechnologies/_packaging/coldchain-software/nuget/v3/index.json" protocolVersion="3" />
+  </packageSources>
+  <packageSourceMapping>
+    <packageSource key="nuget.org">
+      <package pattern="*" />
+    </packageSource>
+    <packageSource key="coldchain-software">
+      <package pattern="Platform.Shared*" />
+    </packageSource>
+  </packageSourceMapping>
+</configuration>
+```
+
+### Global NuGet Configuration
+
+Developers should also configure the package source globally on their development machines:
+
+```bash
+# Add the coldchain-software package source globally
+dotnet nuget add source "https://pkgs.dev.azure.com/DigitalAndConnectedTechnologies/_packaging/coldchain-software/nuget/v3/index.json" --name "coldchain-software"
+
+# Verify package sources
+dotnet nuget list source
+```
+
+### Authentication Requirements
+
+#### Azure DevOps Artifacts Credential Provider
+
+Install the Azure Artifacts Credential Provider for automatic authentication:
+
+**Windows:**
+```powershell
+# Install via PowerShell (run as Administrator)
+iwr https://aka.ms/install-artifacts-credprovider.ps1 | iex
+```
+
+**Alternative - Manual Installation:**
+```bash
+# Download and install the Azure Artifacts Credential Provider
+# https://github.com/microsoft/artifacts-credprovider
+```
+
+#### Personal Access Token (PAT)
+
+If the credential provider doesn't work, configure a Personal Access Token:
+
+1. **Create PAT in Azure DevOps:**
+   - Go to Azure DevOps → User Settings → Personal Access Tokens
+   - Create new token with **Packaging (read)** scope
+   - Copy the token value
+
+2. **Configure PAT for NuGet:**
+   ```bash
+   # Add authenticated source with PAT
+   dotnet nuget add source "https://pkgs.dev.azure.com/DigitalAndConnectedTechnologies/_packaging/coldchain-software/nuget/v3/index.json" --name "coldchain-software" --username "PAT" --password "YOUR_PAT_TOKEN" --store-password-in-clear-text
+   ```
+
+#### Environment Variables
+
+For CI/CD pipelines, use environment variables:
+
+```yaml
+# Azure DevOps Pipeline
+env:
+  NUGET_CREDENTIALPROVIDER_SESSIONTOKENCACHE_ENABLED: true
+  VSS_NUGET_EXTERNAL_FEED_ENDPOINTS: |
+    {
+      "endpointCredentials": [
+        {
+          "endpoint":"https://pkgs.dev.azure.com/DigitalAndConnectedTechnologies/_packaging/coldchain-software/nuget/v3/index.json", 
+          "password":"$(System.AccessToken)"
+        }
+      ]
+    }
+```
+
+### Package Source Verification
+
+Verify package source configuration:
+
+```bash
+# List all configured sources
+dotnet nuget list source
+
+# Test package restoration
+dotnet restore --verbosity detailed
+
+# Search for Platform.Shared packages (if authenticated)
+dotnet package search Platform.Shared --source coldchain-software
+```
+
+### Troubleshooting
+
+#### Common Issues
+
+1. **Authentication Failures:**
+   - Ensure Azure Artifacts Credential Provider is installed
+   - Verify PAT has correct permissions (Packaging - Read)
+   - Clear NuGet cache: `dotnet nuget locals all --clear`
+
+2. **Package Not Found:**
+   - Verify package source URL is correct
+   - Check if you have access to the Azure DevOps organization
+   - Ensure package source mapping is configured correctly
+
+3. **Build Failures:**
+   - Run `dotnet restore` explicitly before building
+   - Check for package version conflicts
+   - Verify target framework compatibility
+
+#### Diagnostic Commands
+
+```bash
+# Clear all NuGet caches
+dotnet nuget locals all --clear
+
+# Restore with detailed logging
+dotnet restore --verbosity detailed
+
+# List package sources with authentication status
+dotnet nuget list source
+
+# Test connectivity to Azure DevOps feed
+curl -I "https://pkgs.dev.azure.com/DigitalAndConnectedTechnologies/_packaging/coldchain-software/nuget/v3/index.json"
+```
+
+### CI/CD Pipeline Configuration
+
+#### Azure DevOps Pipeline
+
+```yaml
+steps:
+- task: DotNetCoreCLI@2
+  displayName: 'Restore NuGet Packages'
+  inputs:
+    command: 'restore'
+    projects: '**/*.csproj'
+    feedsToUse: 'config'
+    nugetConfigPath: 'NuGet.Config'
+    includeNuGetOrg: true
+  env:
+    NUGET_CREDENTIALPROVIDER_SESSIONTOKENCACHE_ENABLED: true
+```
+
+#### GitHub Actions
+
+```yaml
+steps:
+- name: Setup .NET
+  uses: actions/setup-dotnet@v3
+  with:
+    dotnet-version: '8.0.x'
+    source-url: https://pkgs.dev.azure.com/DigitalAndConnectedTechnologies/_packaging/coldchain-software/nuget/v3/index.json
+  env:
+    NUGET_AUTH_TOKEN: ${{ secrets.AZURE_DEVOPS_PAT }}
+
+- name: Restore dependencies
+  run: dotnet restore
+```
+
+### Security Considerations
+
+- **Never commit PAT tokens to source control**
+- Use environment variables or secure secrets storage for tokens
+- Regularly rotate Personal Access Tokens
+- Use minimum required permissions (Packaging - Read only)
+- Consider using service connections for production pipelines
+
+### Development Environment Setup Checklist
+
+- [ ] Azure Artifacts Credential Provider installed
+- [ ] `NuGet.Config` file present in solution root
+- [ ] Package source configured globally: `dotnet nuget list source`
+- [ ] Authentication working: `dotnet restore` succeeds
+- [ ] Package search working: `dotnet package search Platform.Shared`
+- [ ] Build succeeds: `dotnet build`
+
+---
+
+## 19. Source Control Management
 
 ### Git Configuration Requirements
 
@@ -1474,6 +1676,15 @@ When implementing new APIs with Platform.Shared, ensure:
 - [ ] Repository interfaces use Platform.Shared abstractions (`IRepository<TEntity, TId>`)
 - [ ] Exception classes inherit from Platform.Shared `BusinessException`
 - [ ] Constants defined
+
+### NuGet Package Configuration
+- [ ] `NuGet.Config` file created at solution root
+- [ ] coldchain-software package source configured in NuGet.Config
+- [ ] Package source mapping configured for Platform.Shared packages
+- [ ] Global NuGet source configured on development machine
+- [ ] Azure Artifacts Credential Provider installed (or PAT configured)
+- [ ] Package restoration succeeds: `dotnet restore`
+- [ ] Build succeeds with Platform.Shared packages: `dotnet build`
 
 ### Platform.Shared Integration
 - [ ] Added Platform.Shared NuGet package reference
