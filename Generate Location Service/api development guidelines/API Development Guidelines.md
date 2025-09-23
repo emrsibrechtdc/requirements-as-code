@@ -46,7 +46,7 @@ The platform follows a clean architecture approach with the following layers:
 │   └── {ServiceName}/
 │       ├── Platform.{ServiceName}.HttpApi/             # HTTP API Layer
 │       ├── Platform.{ServiceName}.Application/         # Application Layer
-│       ├── Platform.{ServiceName}.Infrastructure/      # Infrastructure Layer (includes DbContext, repositories, migrations)
+│       ├── Platform.{ServiceName}.Infrastructure/      # Infrastructure Layer (consolidated - includes DbContext, repositories, migrations, EventGrid)
 │       └── Platform.{ServiceName}.ApiClient/           # API Client
 └── test/
     ├── Core/
@@ -103,6 +103,39 @@ Platform.{ServiceName}.Application/
 └── Extensions/
     └── ApplicationServiceCollectionExtensions.cs
 ```
+
+### Infrastructure Project Structure (Consolidated)
+
+**Best Practice**: Consolidate all infrastructure concerns into a single Infrastructure project rather than separate SqlServer/Infrastructure projects:
+
+```plaintext
+Platform.{ServiceName}.Infrastructure/
+├── Data/
+│   ├── {ServiceName}DbContext.cs
+│   └── Configurations/
+│       └── {EntityName}Configuration.cs
+├── Repositories/
+│   └── {EntityName}Repository.cs
+├── Migrations/
+│   └── {Timestamp}_{MigrationName}.cs
+└── Extensions/
+    ├── InfrastructureServiceCollectionExtensions.cs
+    └── {ServiceName}IntegrationEventsExtensions.cs
+```
+
+**Infrastructure Consolidation Benefits:**
+- **Simplified Project Structure**: Single infrastructure project instead of multiple data layer projects
+- **Unified Dependency Management**: All data access and EventGrid dependencies in one place
+- **Easier Namespace Management**: Consistent namespace structure
+- **Integrated EventGrid Setup**: EventGrid messaging alongside data access infrastructure
+- **Cleaner Solution Structure**: Fewer projects to manage and maintain
+
+**Migration from Separate Projects**: When consolidating existing separate SqlServer/Infrastructure projects:
+1. Move all Entity Framework configurations, DbContext, and repositories to Infrastructure project
+2. Move all migrations to Infrastructure project  
+3. Update namespaces throughout the solution
+4. Remove the separate SqlServer project from solution
+5. Update project references to point to consolidated Infrastructure project
 
 ### HttpApi Project Structure
 
@@ -1054,6 +1087,51 @@ public class EntityCreatedIntegrationEventHandler : IIntegrationEventHandler<Ent
 - Infrastructure concerns (correlation IDs, etc.)
 - Authentication/authorization data
 
+### EventGrid Infrastructure Configuration
+
+**Platform.Common.EventGrid Package**: For complete EventGrid messaging infrastructure, add the Platform.Common.EventGrid package to your Infrastructure project:
+
+```xml
+<PackageReference Include="Platform.Common.EventGrid" Version="5.20250909.1501" />
+<PackageReference Include="Microsoft.Extensions.Azure" Version="1.13.0" />
+<PackageReference Include="Microsoft.Bcl.AsyncInterfaces" Version="9.0.2" />
+```
+
+**Infrastructure Service Registration**:
+```csharp
+public static IServiceCollection AddLocationIntegrationEvents(this IServiceCollection services, IConfiguration configuration)
+{
+    // Configure EventGrid client for integration events
+    var eventGridUrl = configuration.GetValue<string>("EventGrid:Url");
+    if (!string.IsNullOrEmpty(eventGridUrl))
+    {
+        services.AddAzureClients(builder =>
+        {
+            builder.AddEventGridPublisherClient(new Uri(eventGridUrl));
+        });
+        
+        services.AddSingleton<IMessageEnvelopePublisher>(serviceProvider => 
+            new EventGridMessageEnvelopePublisher(
+                serviceProvider.GetRequiredService<EventGridPublisherClient>(),
+                serviceProvider.GetRequiredService<IMessageSerializer>(),
+                logger: serviceProvider.GetRequiredService<ILogger<IMessageEnvelopePublisher>>()));
+
+        services.AddSingleton<IMessagePublisher, MessagePublisher>();
+    }
+
+    return services;
+}
+```
+
+**Required Namespaces**:
+```csharp
+using Platform.Common.Messaging;
+using Platform.Shared.EntityFrameworkCore; // For UnitOfWork<T>
+using EventGrid; // For EventGridMessageEnvelopePublisher
+using Microsoft.Extensions.Azure;
+using Azure.Messaging.EventGrid;
+```
+
 ### Integration Event Handler Best Practices
 
 **✅ DO - Focus on Business Logic Only:**
@@ -1287,10 +1365,19 @@ public CreateEntityCommandHandler(
 
 All Platform API projects require access to the **Platform.Shared** library, which is hosted in a private Azure DevOps Artifacts feed. Proper NuGet configuration is essential for package restoration and build success.
 
-### Required NuGet Package Source
+### Required NuGet Package Sources
 
-**Artifact Feed**: `coldchain-software`  
+**Primary Artifact Feed**: `coldchain-software`  
 **URL**: `https://pkgs.dev.azure.com/DigitalAndConnectedTechnologies/_packaging/coldchain-software/nuget/v3/index.json`
+
+**Required Platform Packages:**
+- **Platform.Shared** v1.1.20250915.1 - Core abstractions and CQRS infrastructure
+- **Platform.Common.EventGrid** v5.20250909.1501 - EventGrid messaging infrastructure
+
+**Additional Dependencies for EventGrid Integration:**
+- **Microsoft.Extensions.Azure** v1.13.0 - Azure client configuration
+- **Microsoft.Bcl.AsyncInterfaces** v9.0.2 - Runtime dependency compatibility
+- **Azure.Messaging.EventGrid** v4.27.0 - EventGrid client library
 
 ### NuGet.Config File
 
@@ -1310,6 +1397,7 @@ Every solution **must** include a `NuGet.Config` file at the solution root with 
     </packageSource>
     <packageSource key="coldchain-software">
       <package pattern="Platform.Shared*" />
+      <package pattern="Platform.Common*" />
     </packageSource>
   </packageSourceMapping>
 </configuration>
@@ -1412,6 +1500,14 @@ dotnet package search Platform.Shared --source coldchain-software
    - Run `dotnet restore` explicitly before building
    - Check for package version conflicts
    - Verify target framework compatibility
+
+4. **Runtime Dependency Conflicts (Microsoft.Bcl.AsyncInterfaces):**
+   - **Error**: `FileNotFoundException: Could not load file or assembly 'Microsoft.Bcl.AsyncInterfaces, Version=9.0.0.4'`
+   - **Cause**: Platform.Shared requires Microsoft.Bcl.AsyncInterfaces v9.0.2, but lower version resolved
+   - **Solution**: Add explicit package reference to Infrastructure project:
+     ```xml
+     <PackageReference Include="Microsoft.Bcl.AsyncInterfaces" Version="9.0.2" />
+     ```
 
 #### Diagnostic Commands
 

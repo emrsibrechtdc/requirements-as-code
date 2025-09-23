@@ -19,7 +19,9 @@ This LocationService implementation is designed to use the **Platform.Shared** l
 - Database schema and Entity Framework configuration
 
 ✅ **Build Status**: 
-The solution now builds successfully with Platform.Shared version **1.1.20250915.1** from the coldchain-software artifact feed.
+The solution now builds successfully with the following Platform packages from the coldchain-software artifact feed:
+- **Platform.Shared** version 1.1.20250915.1
+- **Platform.Common.EventGrid** version 5.20250909.1501
 
 ## Platform.Shared Integration Updates
 
@@ -35,9 +37,30 @@ The solution has been successfully updated to use the latest Platform.Shared ver
 7. **Service Registration**: Organized Platform.Shared services into appropriate project extensions:
    - `AddPlatformCommonHttpApi()`, `WithAuditing()`, `WithMultiProduct()` → HttpApi project
    - `AddIntegrationEventsServices()` → Application project
+   - `AddLocationIntegrationEvents()` → Infrastructure project (EventGrid messaging setup)
+8. **EventGrid Integration**: Infrastructure project now includes complete EventGrid messaging setup:
+   - `EventGridMessageEnvelopePublisher` for publishing integration events to Azure EventGrid
+   - `MessagePublisher` and `IMessageEnvelopePublisher` abstractions
+   - Azure EventGrid client configuration with `AddAzureClients()`
+
+### Project Structure Updates
+- **Infrastructure Consolidation**: The Platform.Locations.SqlServer project has been consolidated into Platform.Locations.Infrastructure
+  - All Entity Framework configurations, repositories, DbContext, and migrations moved to Infrastructure project
+  - SqlServer project removed from solution
+  - Namespace references updated throughout the solution
 
 ### Dependencies Added
 - `FluentValidation.DependencyInjectionExtensions` v11.9.0
+- `Platform.Common.EventGrid` v5.20250909.1501 (for EventGrid integration messaging)
+- `Microsoft.Extensions.Azure` v1.13.0 (for Azure client configuration)
+- `Microsoft.Bcl.AsyncInterfaces` v9.0.2 (to resolve runtime dependency conflicts)
+
+### Key Namespaces for Platform Integration
+- **Platform.Shared.EntityFrameworkCore**: For `UnitOfWork<T>` implementation
+- **Platform.Common.Messaging**: For messaging abstractions (`IMessagePublisher`, `IMessageEnvelopePublisher`, `IMessageSerializer`)
+- **EventGrid**: For `EventGridMessageEnvelopePublisher` implementation
+- **Platform.Shared.DataLayer**: For repository patterns and data layer abstractions
+- **Platform.Shared.IntegrationEvents**: For integration event interfaces and base classes
 
 ## Build Requirements
 

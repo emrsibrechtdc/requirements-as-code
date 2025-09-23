@@ -29,6 +29,9 @@ var connectionString = builder.Configuration.GetConnectionString("DefaultConnect
     ?? "Server=(localdb)\\mssqllocaldb;Database=Platform.Locations;Trusted_Connection=true;MultipleActiveResultSets=true";
 builder.Services.AddLocationSqlServer(connectionString);
 
+// Add integration events
+builder.Services.AddLocationIntegrationEvents(builder.Configuration);
+
 // Add API versioning
 builder.Services.AddApiVersioning(opt =>
 {
