@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Platform.Shared" Version="1.1.20250915.1" />
+    <PackageReference Include="Platform.Common.EventGrid" Version="5.20250909.1501" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="8.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Azure" Version="1.13.0" />
+    <PackageReference Include="Microsoft.Bcl.AsyncInterfaces" Version="9.0.4" />
+    <PackageReference Include="Azure.Messaging.EventGrid" Version="4.30.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Core\Platform.Customers.Domain\Platform.Customers.Domain.csproj" />
+    <ProjectReference Include="..\Platform.Customers.Application\Platform.Customers.Application.csproj" />
+  </ItemGroup>
+
+</Project>

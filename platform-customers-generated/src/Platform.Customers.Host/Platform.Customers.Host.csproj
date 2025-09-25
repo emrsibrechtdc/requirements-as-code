@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Platform.Shared" Version="1.1.20250915.1" />
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="8.0.0" />
+    <PackageReference Include="MediatR" Version="12.4.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Customers\Platform.Customers.HttpApi\Platform.Customers.HttpApi.csproj" />
+    <ProjectReference Include="..\Customers\Platform.Customers.Application\Platform.Customers.Application.csproj" />
+    <ProjectReference Include="..\Customers\Platform.Customers.Infrastructure\Platform.Customers.Infrastructure.csproj" />
+  </ItemGroup>
+
+</Project>

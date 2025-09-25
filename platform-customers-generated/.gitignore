@@ -1,0 +1,126 @@
+# .NET build outputs
+bin/
+obj/
+out/
+*.dll
+*.exe
+*.pdb
+*.cache
+
+# Build results
+[Dd]ebug/
+[Rr]elease/
+artifacts/
+publish/
+PublishProfiles/
+
+# User-specific files
+*.rsuser
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# Visual Studio
+.vs/
+*.vcxproj.user
+*.vcxproj.filters
+.vscode/
+*.code-workspace
+
+# JetBrains Rider
+.idea/
+*.sln.iml
+*.DotSettings.user
+
+# Environment-specific settings (containing sensitive data)
+**/appsettings.Development.json
+**/appsettings.Production.json
+**/appsettings.Staging.json
+**/appsettings.Local.json
+
+# Keep template files
+!**/appsettings.example.json
+!**/appsettings.template.json
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Platform.Shared local packages (if using local package source)
+packages/Platform.Shared*
+
+# NuGet
+*.nupkg
+*.snupkg
+packages/
+.nuget/
+project.lock.json
+project.fragment.lock.json
+
+# Test coverage and analysis
+TestResults/
+coverage/
+*.trx
+*.coverage
+.sonarqube/
+coverlet/
+
+# SQL Server local database files
+*.mdf
+*.ldf
+*.ndf
+
+# SQLite databases
+*.db
+*.sqlite
+*.sqlite3
+
+# Database project outputs
+*.dacpac
+*.jfm
+
+# Logs
+logs/
+*.log
+
+# Runtime
+*.pid
+*.seed
+*.pid.lock
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Windows image file caches
+Thumbs.db
+ehthumbs.db
+
+# Folder config file
+Desktop.ini
+
+# Recycle Bin used on file shares
+$RECYCLE.BIN/
+
+# Windows shortcuts
+*.lnk
+
+# Linux
+*~
+
+# Temporary files
+*.tmp
+*.temp
+*.swp
+*.swo
+
+# Application specific
+wwwroot/lib/
+node_modules/
