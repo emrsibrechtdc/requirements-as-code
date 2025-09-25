@@ -18,16 +18,18 @@ namespace Platform.Locations.Infrastructure.Extensions;
 
 public static class InfrastructureServiceCollectionExtensions
 {
-    public static IServiceCollection AddLocationInfrastructure(this IServiceCollection services)
+    public static IServiceCollection AddLocationInfrastructure(this IServiceCollection services, IConfiguration configuration)
     {
         // Infrastructure services that don't depend on specific data store
-        
+        services.AddLocationSqlServer(configuration);
+        services.AddLocationIntegrationEvents(configuration);
         return services;
     }
 
-    public static IServiceCollection AddLocationSqlServer(this IServiceCollection services, string connectionString)
+    public static IServiceCollection AddLocationSqlServer(this IServiceCollection services, IConfiguration configuration)
     {
         // Add Entity Framework DbContext with Platform.Shared configuration
+        var connectionString = configuration.GetConnectionString("LocationsDb");
         services.AddDbContext<LocationsDbContext>(options =>
         {
             options.UseSqlServer(connectionString);

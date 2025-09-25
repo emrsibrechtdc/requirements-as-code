@@ -21,16 +21,9 @@ builder.Services.AddMediatR(cfg => cfg.RegisterServicesFromAssembly(typeof(Progr
 
 // Add application services
 builder.Services.AddLocationApplication();
-builder.Services.AddLocationInfrastructure();
+builder.Services.AddLocationInfrastructure(builder.Configuration);
 builder.Services.AddLocationHttpApi(builder.Configuration, (IConfigurationBuilder)builder.Configuration, builder.Environment);
 
-// Add data store
-var connectionString = builder.Configuration.GetConnectionString("DefaultConnection") 
-    ?? "Server=(localdb)\\mssqllocaldb;Database=Platform.Locations;Trusted_Connection=true;MultipleActiveResultSets=true";
-builder.Services.AddLocationSqlServer(connectionString);
-
-// Add integration events
-builder.Services.AddLocationIntegrationEvents(builder.Configuration);
 
 // Add API versioning
 builder.Services.AddApiVersioning(opt =>
