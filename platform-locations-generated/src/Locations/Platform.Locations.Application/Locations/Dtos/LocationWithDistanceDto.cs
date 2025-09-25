@@ -1,6 +1,6 @@
 namespace Platform.Locations.Application.Locations.Dtos;
 
-public record LocationDto(
+public record LocationWithDistanceDto(
     Guid Id,
     string LocationCode,
     string LocationTypeCode,
@@ -19,5 +19,7 @@ public record LocationDto(
     // Coordinate fields
     decimal? Latitude,
     decimal? Longitude,
-    double? GeofenceRadius
+    double? GeofenceRadius,
+    // Distance from search point
+    double DistanceMeters
 );

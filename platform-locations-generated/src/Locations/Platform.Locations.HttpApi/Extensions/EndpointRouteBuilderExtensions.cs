@@ -112,6 +112,57 @@ public static class EndpointRouteBuilderExtensions
               .Produces<ProblemDetails>(StatusCodes.Status400BadRequest)
               .Produces<ProblemDetails>(StatusCodes.Status403Forbidden);
 
+        // Coordinate-based location endpoints
+        var getLocationByCoordinates = endpoints.MapGet("/locations/by-coordinates", async (decimal latitude, decimal longitude, ISender sender, CancellationToken cancellationToken) =>
+        {           
+            var query = new GetLocationByCoordinatesQuery(latitude, longitude);
+            var result = await sender.Send(query, cancellationToken);
+            return result != null ? (IResult)TypedResults.Ok(result) : TypedResults.NotFound();
+        }).WithApiVersionSet(apiVersionSet)
+              .MapToApiVersion(1.0)
+              .WithSummary("Get location containing specific coordinates")
+              .WithDescription("Returns the location that contains the given coordinates within its geofence boundary. Product context is automatically applied based on caller identity.")
+              .Produces<LocationDto>(StatusCodes.Status200OK)
+              .Produces(StatusCodes.Status404NotFound)
+              .Produces<ProblemDetails>(StatusCodes.Status500InternalServerError)
+              .Produces<ProblemDetails>(StatusCodes.Status401Unauthorized)
+              .Produces<ProblemDetails>(StatusCodes.Status400BadRequest)
+              .Produces<ProblemDetails>(StatusCodes.Status403Forbidden);
+
+        var getNearbyLocations = endpoints.MapGet("/locations/nearby", async (decimal latitude, decimal longitude, double? radiusMeters, int? maxResults, ISender sender, CancellationToken cancellationToken) =>
+        {
+            if (radiusMeters == null || radiusMeters <= 0) radiusMeters = 5000; // Default radius
+            if (maxResults == null || maxResults <= 0) maxResults = 10; // Default max results
+            
+            var query = new GetNearbyLocationsQuery(latitude, longitude, radiusMeters.Value, maxResults.Value);
+            var result = await sender.Send(query, cancellationToken);
+            return TypedResults.Ok(result);
+        }).WithApiVersionSet(apiVersionSet)
+              .MapToApiVersion(1.0)
+              .WithSummary("Get nearby locations within radius")
+              .WithDescription("Returns locations within specified radius, ordered by distance. Product context is automatically applied based on caller identity.")
+              .Produces<IEnumerable<LocationWithDistanceDto>>(StatusCodes.Status200OK)
+              .Produces<ProblemDetails>(StatusCodes.Status500InternalServerError)
+              .Produces<ProblemDetails>(StatusCodes.Status401Unauthorized)
+              .Produces<ProblemDetails>(StatusCodes.Status400BadRequest)
+              .Produces<ProblemDetails>(StatusCodes.Status403Forbidden);
+
+        var updateLocationCoordinates = endpoints.MapPut("/locations/coordinates", async (HttpContext context, UpdateLocationCoordinatesCommand command, ISender sender, CancellationToken cancellationToken) =>
+        {
+            var result = await sender.Send(command, cancellationToken);
+            return TypedResults.Ok(result);
+        }).WithApiVersionSet(apiVersionSet)
+              .MapToApiVersion(1.0)
+              .WithSummary("Update location coordinates")
+              .WithDescription("Updates the coordinates and geofence radius for a specific location.")
+              .Produces<LocationResponse>(StatusCodes.Status200OK)
+              .Produces<ProblemDetails>(StatusCodes.Status404NotFound)
+              .Produces<ProblemDetails>(StatusCodes.Status500InternalServerError)
+              .Produces<ProblemDetails>(StatusCodes.Status401Unauthorized)
+              .Produces<ProblemDetails>(StatusCodes.Status422UnprocessableEntity)
+              .Produces<ProblemDetails>(StatusCodes.Status400BadRequest)
+              .Produces<ProblemDetails>(StatusCodes.Status403Forbidden);
+
         if (authorizationRequired)
         {
             registerLocation.RequireAuthorization(builder =>
@@ -140,6 +191,21 @@ public static class EndpointRouteBuilderExtensions
             });
 
             deactivateLocation.RequireAuthorization(builder =>
+            {
+                builder.RequireRole("Locations.Update");
+            });
+
+            getLocationByCoordinates.RequireAuthorization(builder =>
+            {
+                builder.RequireRole("Locations.Read");
+            });
+
+            getNearbyLocations.RequireAuthorization(builder =>
+            {
+                builder.RequireRole("Locations.Read");
+            });
+
+            updateLocationCoordinates.RequireAuthorization(builder =>
             {
                 builder.RequireRole("Locations.Update");
             });

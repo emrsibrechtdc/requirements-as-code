@@ -18,6 +18,18 @@ public class Location : FullyAuditedActivableAggregateRoot<Guid>, IMultiProductO
     public string State { get; private set; } = default!;
     public string ZipCode { get; private set; } = default!;
     public string Country { get; private set; } = default!;
+    
+    // Coordinate properties for geofencing
+    public decimal? Latitude { get; private set; }
+    public decimal? Longitude { get; private set; }
+    public double? GeofenceRadius { get; private set; }
+    
+    // Read-only computed property (managed by database)
+    public object? ComputedCoordinates { get; private set; }
+    
+    // Convenience properties
+    public bool HasCoordinates => Latitude.HasValue && Longitude.HasValue;
+    public bool HasGeofence => HasCoordinates && GeofenceRadius.HasValue && GeofenceRadius > 0;
 
     // Private constructor for EF Core
     private Location() { }
@@ -164,10 +176,62 @@ public class Location : FullyAuditedActivableAggregateRoot<Guid>, IMultiProductO
         }
         base.Deactivate();
     }
+    
+    // Coordinate business logic methods
+    public void SetCoordinates(decimal latitude, decimal longitude, double? geofenceRadius = null)
+    {
+        ValidateCoordinates(latitude, longitude, geofenceRadius);
+        
+        Latitude = latitude;
+        Longitude = longitude;
+        GeofenceRadius = geofenceRadius;
+    }
+    
+    public void ClearCoordinates()
+    {
+        Latitude = null;
+        Longitude = null;
+        GeofenceRadius = null;
+    }
+    
+    // Distance calculation (approximate, for business logic - use database spatial functions for queries)
+    public double ApproximateDistanceTo(decimal latitude, decimal longitude)
+    {
+        if (!HasCoordinates)
+            throw new InvalidOperationException("Location does not have coordinates");
+            
+        // Haversine formula approximation (in meters)
+        const double earthRadius = 6371000; // meters
+        var dLat = DegreesToRadians((double)(latitude - Latitude!.Value));
+        var dLng = DegreesToRadians((double)(longitude - Longitude!.Value));
+        
+        var a = Math.Sin(dLat / 2) * Math.Sin(dLat / 2) +
+                Math.Cos(DegreesToRadians((double)Latitude!.Value)) * 
+                Math.Cos(DegreesToRadians((double)latitude)) *
+                Math.Sin(dLng / 2) * Math.Sin(dLng / 2);
+                
+        var c = 2 * Math.Atan2(Math.Sqrt(a), Math.Sqrt(1 - a));
+        return earthRadius * c;
+    }
+    
+    // Validation method
+    private static void ValidateCoordinates(decimal latitude, decimal longitude, double? geofenceRadius)
+    {
+        if (latitude < -90 || latitude > 90)
+            throw new ArgumentException("Latitude must be between -90 and +90 degrees", nameof(latitude));
+            
+        if (longitude < -180 || longitude > 180)
+            throw new ArgumentException("Longitude must be between -180 and +180 degrees", nameof(longitude));
+            
+        if (geofenceRadius.HasValue && geofenceRadius <= 0)
+            throw new ArgumentException("Geofence radius must be positive", nameof(geofenceRadius));
+    }
+    
+    private static double DegreesToRadians(double degrees) => degrees * Math.PI / 180;
 
     public Dictionary<string, string> ToInstrumentationProperties()
     {
-        return new Dictionary<string, string>
+        var properties = new Dictionary<string, string>
         {
             { "locationCode", LocationCode },
             { "locationTypeCode", LocationTypeCode },
@@ -176,5 +240,18 @@ public class Location : FullyAuditedActivableAggregateRoot<Guid>, IMultiProductO
             { "country", Country },
             { "isActive", IsActive.ToString() }
         };
+        
+        if (HasCoordinates)
+        {
+            properties.Add("latitude", Latitude.ToString()!);
+            properties.Add("longitude", Longitude.ToString()!);
+        }
+        
+        if (HasGeofence)
+        {
+            properties.Add("geofenceRadius", GeofenceRadius.ToString()!);
+        }
+        
+        return properties;
     }
 }

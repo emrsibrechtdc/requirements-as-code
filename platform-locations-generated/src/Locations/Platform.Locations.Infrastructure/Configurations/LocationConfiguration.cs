@@ -86,6 +86,25 @@ public class LocationConfiguration : IEntityTypeConfiguration<Location>
             .IsRequired()
             .HasMaxLength(100); // Platform standard product identifier length
         
+        // Coordinate properties
+        builder.Property(x => x.Latitude)
+            .HasColumnType("DECIMAL(10,8)")
+            .IsRequired(false);
+            
+        builder.Property(x => x.Longitude)
+            .HasColumnType("DECIMAL(11,8)")
+            .IsRequired(false);
+            
+        builder.Property(x => x.GeofenceRadius)
+            .HasColumnType("FLOAT")
+            .IsRequired(false);
+            
+        // Computed spatial column (read-only)
+        builder.Property(x => x.ComputedCoordinates)
+            .HasColumnType("GEOGRAPHY")
+            .HasComputedColumnSql("CASE WHEN [Latitude] IS NOT NULL AND [Longitude] IS NOT NULL THEN geography::Point([Latitude], [Longitude], 4326) ELSE NULL END", stored: true)
+            .ValueGeneratedOnAddOrUpdate();
+        
         // Indexes
         builder.HasIndex(x => x.LocationCode)
             .IsUnique()
