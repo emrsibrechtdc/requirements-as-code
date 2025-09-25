@@ -13,6 +13,7 @@ using Platform.Common;
 using Platform.Common.Messaging;
 using Platform.Shared.EntityFrameworkCore;
 using EventGrid;
+using Platform.Shared.IntegrationEvents.Configuration;
 
 namespace Platform.Locations.Infrastructure.Extensions;
 
@@ -47,6 +48,8 @@ public static class InfrastructureServiceCollectionExtensions
     public static IServiceCollection AddLocationIntegrationEvents(this IServiceCollection services, IConfiguration configuration)
     {
         // Configure integration events services
+        var eventGridSettingsSection = configuration.GetSection("EventGrid");
+        services.AddOptions<EventGridSettings>().Bind(eventGridSettingsSection).ValidateDataAnnotations().ValidateOnStart();
         var eventGridUrl = configuration.GetValue<string>("EventGrid:Url");
         if (!string.IsNullOrEmpty(eventGridUrl))
         {

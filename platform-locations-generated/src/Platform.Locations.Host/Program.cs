@@ -82,3 +82,6 @@ app.MapGet("/health", () => Results.Ok(new { status = "healthy", timestamp = Dat
     .WithTags("Health");
 
 app.Run();
+
+// Make Program class accessible to integration tests
+public partial class Program { }

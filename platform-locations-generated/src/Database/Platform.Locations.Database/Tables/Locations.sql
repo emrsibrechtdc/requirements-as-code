@@ -10,12 +10,15 @@ CREATE TABLE [dbo].[Locations] (
     [ZipCode] NVARCHAR(20) NOT NULL,
     [Country] NVARCHAR(50) NOT NULL,
     [IsActive] BIT NOT NULL DEFAULT 1,
-    [CreatedAt] DATETIME2(7) NOT NULL DEFAULT GETUTCDATE(),
+    [CreatedAt] DATETIMEOFFSET(2) NOT NULL DEFAULT GETUTCDATE(),
     [CreatedBy] NVARCHAR(256) NULL,
-    [UpdatedAt] DATETIME2(7) NULL,
+    [UpdatedAt] DATETIMEOFFSET(2) NULL,
     [UpdatedBy] NVARCHAR(256) NULL,
-    [DeletedAt] DATETIME2(7) NULL,
+    [DeletedAt] DATETIMEOFFSET(2) NULL,
     [DeletedBy] NVARCHAR(256) NULL,
+    [IsDeleted] bit NOT NULL DEFAULT 0,
+    [LastActivationDate]	DATETIMEOFFSET(2)		NULL,
+	[LastDeactivationDate]	DATETIMEOFFSET(2)		NULL,
     CONSTRAINT [PK_Locations] PRIMARY KEY ([Id])
 );
 GO
