@@ -14,6 +14,8 @@ using Platform.Locations.Application.Locations.Dtos;
 using Xunit;
 using Microsoft.Extensions.Configuration;
 using Platform.Locations.Infrastructure.Repositories;
+using Platform.Shared.DataLayer;
+using Platform.Shared.Ddd.Domain.Entities;
 
 namespace Platform.Locations.IntegrationTests.Infrastructure;
 
@@ -25,6 +27,7 @@ public class IntegrationTestBase : IAsyncLifetime
     protected readonly IServiceScope ServiceScope;
     protected readonly LocationsDbContext DbContext;
     private ILocationRepository _locationRepository;
+    private IDataFilter<IActivable> _activableDataFilter;
     
     private DbConnection _dbConnection = null!;
     private Respawner _respawner = null!;
@@ -64,14 +67,13 @@ public class IntegrationTestBase : IAsyncLifetime
                         options.EnableSensitiveDataLogging();
                         options.EnableDetailedErrors();
                     });
-
-                    // Database already exists, no need to create/delete
                 });
             });
 
         HttpClient = Factory.CreateClient();
         HttpClient.DefaultRequestHeaders.Add("local-product", "TEST_PRODUCT");
         ServiceScope = Factory.Services.CreateScope();
+        _activableDataFilter = ServiceScope.ServiceProvider.GetRequiredService<IDataFilter<IActivable>>();
         DbContext = ServiceScope.ServiceProvider.GetRequiredService<LocationsDbContext>();
         _locationRepository = new LocationRepository(DbContext);
     }
@@ -165,7 +167,9 @@ public class IntegrationTestBase : IAsyncLifetime
         string locationTypeCode = "WAREHOUSE",
         bool isActive = true)
     {
-        var location = Location.Create(
+        // Use the registration endpoint instead of direct database seeding
+        // This ensures the multi-product functionality is properly applied
+        var registerCommand = new RegisterLocationCommand(
             locationCode,
             locationTypeCode,
             "123 Test Street",
@@ -175,18 +179,24 @@ public class IntegrationTestBase : IAsyncLifetime
             "12345",
             "USA");
 
-        // Set required Product property for multi-product architecture
-        location.Product = "TEST_PRODUCT";
+        var registerResponse = await PostJsonAsync("/locations/register", registerCommand);
+        registerResponse.EnsureSuccessStatusCode();
 
-        if (!isActive)
+        // Get the created location from the database
+        var location = await FindLocationByCodeAsync(locationCode);
+        if (location == null)
         {
-            location.Deactivate();
+            throw new InvalidOperationException($"Location {locationCode} was not found after registration");
         }
 
-        DbContext.Locations.Add(location);
-        await DbContext.SaveChangesAsync(CancellationToken.None);
+        // If we need the location to be inactive, deactivate it
+        if (!isActive)
+        {
+            var deactivateResponse = await HttpClient.PutAsync($"/locations/{locationCode}/deactivate", null);
+            deactivateResponse.EnsureSuccessStatusCode();
+        }
 
-        return location;
+        return location!;
     }
 
     protected async Task<List<Location>> SeedMultipleLocationsAsync(int count)
@@ -195,20 +205,39 @@ public class IntegrationTestBase : IAsyncLifetime
         
         for (int i = 1; i <= count; i++)
         {
-            var location = Location.Create(
-                $"TEST-LOC-{i:000}",
-                "WAREHOUSE",
-                $"{i} Test Street",
-                "Suite 100",
-                "Test City",
-                "TX",
-                "12345",
-                "USA");
-
-            await _locationRepository.AddAsync(location, default);
+            var locationCode = $"TEST-LOC-{i:000}";
+            var location = await SeedLocationInDatabaseAsync(locationCode, "WAREHOUSE", true);
+            locations.Add(location);
         }
 
-        await DbContext.SaveChangesAsync(CancellationToken.None);
+        return locations;
+    }
+
+    protected async Task<List<Location>> SeedMultipleUniqueLocationsAsync(int count)
+    {
+        var locations = new List<Location>();
+        var baseTicks = DateTime.Now.Ticks;
+        
+        for (int i = 1; i <= count; i++)
+        {
+            var locationCode = $"UNIQUE-{baseTicks}-{i:000}";
+            var location = await SeedLocationInDatabaseAsync(locationCode, "WAREHOUSE", true);
+            locations.Add(location);
+        }
+
+        return locations;
+    }
+
+    protected async Task<List<Location>> SeedMultipleLocationsWithPrefixAsync(int count, string prefix)
+    {
+        var locations = new List<Location>();
+        
+        for (int i = 1; i <= count; i++)
+        {
+            var locationCode = $"{prefix}-{i:000}";
+            var location = await SeedLocationInDatabaseAsync(locationCode, "WAREHOUSE", true);
+            locations.Add(location);
+        }
 
         return locations;
     }
@@ -266,6 +295,7 @@ public class IntegrationTestBase : IAsyncLifetime
     {
         return await DbContext.Locations
             .FirstOrDefaultAsync(l => l.LocationCode == locationCode);
+
     }
 
     protected async Task<int> GetLocationCountAsync()

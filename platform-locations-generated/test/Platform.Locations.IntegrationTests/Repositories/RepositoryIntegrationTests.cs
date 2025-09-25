@@ -6,6 +6,7 @@ using Xunit;
 
 namespace Platform.Locations.IntegrationTests.Repositories;
 
+[Collection("Database Integration Tests")]
 public class RepositoryIntegrationTests : IntegrationTestBase
 {
     private readonly ILocationRepository _locationRepository;

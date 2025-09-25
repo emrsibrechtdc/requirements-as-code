@@ -5,6 +5,8 @@ using Platform.Locations.Application.IntegrationEvents;
 using Platform.Locations.Domain.Locations;
 using Platform.Shared.Cqrs.Mediatr;
 using Platform.Shared.IntegrationEvents;
+using Platform.Shared.DataLayer;
+using Platform.Shared.Ddd.Domain.Entities;
 
 namespace Platform.Locations.Application.Locations.Commands;
 
@@ -14,26 +16,34 @@ public class ActivateLocationCommandHandler : ICommandHandler<ActivateLocationCo
     private readonly IValidator<ActivateLocationCommand> _validator;
     private readonly IMapper _mapper;
     private readonly IIntegrationEventPublisher _eventPublisher;
+    private readonly IDataFilter<IActivable> _activableDataFilter;
 
     public ActivateLocationCommandHandler(
         ILocationRepository locationRepository,
         IValidator<ActivateLocationCommand> validator,
         IMapper mapper,
-        IIntegrationEventPublisher eventPublisher)
+        IIntegrationEventPublisher eventPublisher,
+        IDataFilter<IActivable> activableDataFilter)
     {
         _locationRepository = locationRepository;
         _validator = validator;
         _mapper = mapper;
         _eventPublisher = eventPublisher;
+        _activableDataFilter = activableDataFilter;
+
     }
 
     public async Task<LocationResponse> Handle(ActivateLocationCommand request, CancellationToken cancellationToken)
     {
         // Input validation
         _validator.ValidateAndThrow(request);
-        
+        Location? location = null;
         // Get existing location
-        var location = await _locationRepository.GetByLocationCodeAsync(request.LocationCode, cancellationToken);
+        using (_activableDataFilter.Disable())
+        {
+            location = await _locationRepository.GetByLocationCodeAsync(request.LocationCode, cancellationToken);
+        }
+
         if (location == null)
         {
             throw new LocationNotFoundException(request.LocationCode);

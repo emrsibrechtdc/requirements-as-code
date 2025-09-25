@@ -9,6 +9,7 @@ using Xunit;
 
 namespace Platform.Locations.IntegrationTests.CommandHandlers;
 
+[Collection("Database Integration Tests")]
 public class CommandHandlerIntegrationTests : IntegrationTestBase
 {
     private readonly ISender _mediator;

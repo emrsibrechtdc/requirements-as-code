@@ -13,10 +13,13 @@ public static class LocationsHttpApiServiceCollectionExtensions
         services.AddPlatformCommonHttpApi(configuration, configurationBuilder, environment, "Locations")
                .WithAuditing()
                .WithMultiProduct();
-        
+
+        services.AddHealthChecks()
+                          .AddSqlServer(configuration.GetConnectionString("LocationDb")!);
+
         // HTTP API specific services can be added here
         // Currently no additional services needed beyond what's provided by Platform.Shared
-        
+
         return services;
     }
 }

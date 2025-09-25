@@ -1,10 +1,12 @@
 using Asp.Versioning;
 using MediatR;
 using Platform.Locations.Application.Extensions;
+using Platform.Locations.Application.Locations;
 using Platform.Locations.HttpApi;
 using Platform.Locations.HttpApi.Extensions;
 using Platform.Locations.Infrastructure.Extensions;
 using Platform.Shared.Cqrs.Mediatr;
+using Platform.Shared.HttpApi.Extensions;
 using Serilog;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -71,6 +73,7 @@ var version = Version.Parse(versionString);
 ApiVersion apiVersion = new ApiVersion(version.Major, version.Minor);
 var versionSet = app.NewApiVersionSet().HasApiVersion(apiVersion).ReportApiVersions().Build();
 
+app.UsePlatformCommonHttpApi("Locations", $"{version.Major}.{version.Minor}");
 // Determine if authorization is required (disabled in development)
 bool authorizationRequired = !app.Environment.IsDevelopment();
 

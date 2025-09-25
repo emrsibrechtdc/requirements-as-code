@@ -1,7 +1,9 @@
+using Platform.Common.Messaging;
 using Platform.Shared.IntegrationEvents;
 
 namespace Platform.Locations.Application.IntegrationEvents;
 
+[MessageType("LocationAddressUpdatedIntegrationEvent")]
 public record LocationAddressUpdatedIntegrationEvent
 (
     string LocationCode,

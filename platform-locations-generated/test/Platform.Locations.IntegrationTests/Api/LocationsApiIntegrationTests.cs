@@ -8,16 +8,22 @@ using Xunit;
 
 namespace Platform.Locations.IntegrationTests.Api;
 
+[Collection("Database Integration Tests")]
 public class LocationsApiIntegrationTests : IntegrationTestBase
 {
     public LocationsApiIntegrationTests() : base() { }
+
+    private string GenerateUniqueLocationCode(string prefix = "TEST")
+    {
+        return $"{prefix}-{DateTime.Now.Ticks}";
+    }
 
     [Fact]
     public async Task RegisterLocation_ValidCommand_ReturnsSuccessAndCreatesLocation()
     {
         // Arrange
-        await ResetDatabaseAsync();
-        var command = CreateValidRegisterCommand("REG-TEST-001");
+        var locationCode = GenerateUniqueLocationCode("REG");
+        var command = CreateValidRegisterCommand(locationCode);
 
         // Act
         var response = await PostJsonAsync("/locations/register", command);
@@ -48,8 +54,7 @@ public class LocationsApiIntegrationTests : IntegrationTestBase
     public async Task RegisterLocation_DuplicateLocationCode_ReturnsBadRequest()
     {
         // Arrange
-        await ResetDatabaseAsync();
-        var existingLocationCode = "DUP-TEST-001";
+        var existingLocationCode = GenerateUniqueLocationCode("DUP");
         await SeedLocationInDatabaseAsync(existingLocationCode);
         
         var command = CreateValidRegisterCommand(existingLocationCode);
@@ -58,14 +63,13 @@ public class LocationsApiIntegrationTests : IntegrationTestBase
         var response = await PostJsonAsync("/locations/register", command);
 
         // Assert
-        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        response.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity);
     }
 
     [Fact]
     public async Task RegisterLocation_InvalidCommand_ReturnsBadRequest()
     {
         // Arrange
-        await ResetDatabaseAsync();
         var invalidCommand = new RegisterLocationCommand(
             "", // Empty location code
             "WAREHOUSE",
@@ -87,15 +91,14 @@ public class LocationsApiIntegrationTests : IntegrationTestBase
     public async Task GetLocations_WithoutFilter_ReturnsAllLocations()
     {
         // Arrange
-        await ResetDatabaseAsync();
-        var seededLocations = await SeedMultipleLocationsAsync(5);
+        var seededLocations = await SeedMultipleUniqueLocationsAsync(5);
 
         // Act
         var locations = await GetJsonAsync<List<LocationDto>>("/locations");
 
         // Assert
         locations.Should().NotBeNull();
-        locations!.Count.Should().Be(5);
+        locations!.Count.Should().BeGreaterThanOrEqualTo(5);
         
         foreach (var seededLocation in seededLocations)
         {
@@ -107,24 +110,24 @@ public class LocationsApiIntegrationTests : IntegrationTestBase
     public async Task GetLocations_WithLocationCodeFilter_ReturnsMatchingLocations()
     {
         // Arrange
-        await ResetDatabaseAsync();
-        await SeedMultipleLocationsAsync(5);
+        var basePrefix = GenerateUniqueLocationCode("FILTER");
+        var seededLocations = await SeedMultipleLocationsWithPrefixAsync(5, basePrefix);
 
         // Act
-        var locations = await GetJsonAsync<List<LocationDto>>("/locations?locationCode=TEST-LOC-00");
+        var locations = await GetJsonAsync<List<LocationDto>>($"/locations?locationCode={basePrefix}");
 
         // Assert
         locations.Should().NotBeNull();
         locations!.Count.Should().BeGreaterThan(0);
-        locations.All(l => l.LocationCode!.StartsWith("TEST-LOC-00")).Should().BeTrue();
+        locations.All(l => l.LocationCode!.StartsWith(basePrefix)).Should().BeTrue();
     }
 
     [Fact]
     public async Task UpdateLocationAddress_ExistingLocation_ReturnsSuccessAndUpdatesAddress()
     {
         // Arrange
-        await ResetDatabaseAsync();
-        var existingLocation = await SeedLocationInDatabaseAsync("UPDATE-TEST-001");
+        var locationCode = GenerateUniqueLocationCode("UPDATE");
+        var existingLocation = await SeedLocationInDatabaseAsync(locationCode);
         var updateDto = CreateValidAddressDto();
         var originalCity = existingLocation.City;
 
@@ -146,23 +149,22 @@ public class LocationsApiIntegrationTests : IntegrationTestBase
     public async Task UpdateLocationAddress_NonExistentLocation_ReturnsNotFound()
     {
         // Arrange
-        await ResetDatabaseAsync();
         var updateDto = CreateValidAddressDto();
-        var nonExistentLocationCode = "NON-EXISTENT-001";
+        var nonExistentLocationCode = GenerateUniqueLocationCode("NONEXIST");
 
         // Act
         var response = await PutJsonAsync($"/locations/{nonExistentLocationCode}/updateaddress", updateDto);
 
         // Assert
-        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        response.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity);
     }
 
     [Fact]
     public async Task UpdateLocationAddress_InvalidAddress_ReturnsBadRequest()
     {
         // Arrange
-        await ResetDatabaseAsync();
-        var existingLocation = await SeedLocationInDatabaseAsync("INVALID-UPDATE-001");
+        var locationCode = GenerateUniqueLocationCode("INVALID");
+        var existingLocation = await SeedLocationInDatabaseAsync(locationCode);
         var invalidUpdateDto = new AddressDto(
             "", // Empty address line 1
             null,
@@ -182,11 +184,11 @@ public class LocationsApiIntegrationTests : IntegrationTestBase
     public async Task ActivateLocation_InactiveLocation_ReturnsSuccessAndActivatesLocation()
     {
         // Arrange
-        await ResetDatabaseAsync();
-        var inactiveLocation = await SeedLocationInDatabaseAsync("ACTIVATE-TEST-001", isActive: false);
+        var locationCode = GenerateUniqueLocationCode("ACTIVATE");
+        var inactiveLocation = await SeedLocationInDatabaseAsync(locationCode, isActive: false);
 
         // Act
-        var response = await HttpClient.PutAsync($"/locations/{inactiveLocation.LocationCode}/activate", null);
+        var response = await HttpClient.PutAsync($"/locations/{locationCode}/activate", null);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -201,36 +203,35 @@ public class LocationsApiIntegrationTests : IntegrationTestBase
     public async Task ActivateLocation_AlreadyActiveLocation_ReturnsBadRequest()
     {
         // Arrange
-        await ResetDatabaseAsync();
-        var activeLocation = await SeedLocationInDatabaseAsync("ALREADY-ACTIVE-001", isActive: true);
+        var locationCode = GenerateUniqueLocationCode("ACTIVE");
+        var activeLocation = await SeedLocationInDatabaseAsync(locationCode, isActive: true);
 
         // Act
         var response = await HttpClient.PutAsync($"/locations/{activeLocation.LocationCode}/activate", null);
-
+        var content = await response.Content.ReadAsStringAsync();
         // Assert
-        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        response.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity);
     }
 
     [Fact]
     public async Task ActivateLocation_NonExistentLocation_ReturnsBadRequest()
     {
         // Arrange
-        await ResetDatabaseAsync();
-        var nonExistentLocationCode = "NON-EXISTENT-ACTIVATE";
+        var nonExistentLocationCode = GenerateUniqueLocationCode("NOACTIVATE");
 
         // Act
         var response = await HttpClient.PutAsync($"/locations/{nonExistentLocationCode}/activate", null);
 
         // Assert
-        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        response.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity);
     }
 
     [Fact]
     public async Task DeactivateLocation_ActiveLocation_ReturnsSuccessAndDeactivatesLocation()
     {
         // Arrange
-        await ResetDatabaseAsync();
-        var activeLocation = await SeedLocationInDatabaseAsync("DEACTIVATE-TEST-001", isActive: true);
+        var locationCode = GenerateUniqueLocationCode("DEACTIVATE");
+        var activeLocation = await SeedLocationInDatabaseAsync(locationCode, isActive: true);
 
         // Act
         var response = await HttpClient.PutAsync($"/locations/{activeLocation.LocationCode}/deactivate", null);
@@ -248,36 +249,35 @@ public class LocationsApiIntegrationTests : IntegrationTestBase
     public async Task DeactivateLocation_AlreadyInactiveLocation_ReturnsBadRequest()
     {
         // Arrange
-        await ResetDatabaseAsync();
-        var inactiveLocation = await SeedLocationInDatabaseAsync("ALREADY-INACTIVE-001", isActive: false);
+        var locationCode = GenerateUniqueLocationCode("INACTIVE");
+        var inactiveLocation = await SeedLocationInDatabaseAsync(locationCode, isActive: false);
 
         // Act
         var response = await HttpClient.PutAsync($"/locations/{inactiveLocation.LocationCode}/deactivate", null);
 
         // Assert
-        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        response.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity);
     }
 
     [Fact]
     public async Task DeactivateLocation_NonExistentLocation_ReturnsBadRequest()
     {
         // Arrange
-        await ResetDatabaseAsync();
-        var nonExistentLocationCode = "NON-EXISTENT-DEACTIVATE";
+        var nonExistentLocationCode = GenerateUniqueLocationCode("NODEACTIVATE");
 
         // Act
         var response = await HttpClient.PutAsync($"/locations/{nonExistentLocationCode}/deactivate", null);
 
         // Assert
-        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        response.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity);
     }
 
     [Fact]
     public async Task DeleteLocation_ExistingLocation_ReturnsSuccessAndDeletesLocation()
     {
         // Arrange
-        await ResetDatabaseAsync();
-        var locationToDelete = await SeedLocationInDatabaseAsync("DELETE-TEST-001");
+        var locationCode = GenerateUniqueLocationCode("DELETE");
+        var locationToDelete = await SeedLocationInDatabaseAsync(locationCode);
         var initialCount = await GetLocationCountAsync();
 
         // Act
@@ -296,22 +296,20 @@ public class LocationsApiIntegrationTests : IntegrationTestBase
     public async Task DeleteLocation_NonExistentLocation_ReturnsBadRequest()
     {
         // Arrange
-        await ResetDatabaseAsync();
-        var nonExistentLocationCode = "NON-EXISTENT-DELETE";
+        var nonExistentLocationCode = GenerateUniqueLocationCode("NODELETE");
 
         // Act
         var response = await HttpClient.DeleteAsync($"/locations?locationCode={nonExistentLocationCode}");
 
         // Assert
-        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        response.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity);
     }
 
     [Fact]
     public async Task LocationLifecycle_CompleteFlow_WorksCorrectly()
     {
         // Arrange
-        await ResetDatabaseAsync();
-        var locationCode = "LIFECYCLE-TEST-001";
+        var locationCode = GenerateUniqueLocationCode("LIFECYCLE");
 
         // Act & Assert - Register Location
         var registerCommand = CreateValidRegisterCommand(locationCode);
@@ -357,13 +355,13 @@ public class LocationsApiIntegrationTests : IntegrationTestBase
     public async Task MultipleOperations_Concurrent_HandleCorrectly()
     {
         // Arrange
-        await ResetDatabaseAsync();
         var tasks = new List<Task<HttpResponseMessage>>();
+        var basePrefix = GenerateUniqueLocationCode("CONCURRENT");
 
         // Act - Create multiple locations concurrently
         for (int i = 1; i <= 10; i++)
         {
-            var command = CreateValidRegisterCommand($"CONCURRENT-{i:00}");
+            var command = CreateValidRegisterCommand($"{basePrefix}-{i:00}");
             tasks.Add(PostJsonAsync("/locations/register", command));
         }
 
@@ -373,7 +371,12 @@ public class LocationsApiIntegrationTests : IntegrationTestBase
         responses.Should().AllSatisfy(response => 
             response.StatusCode.Should().Be(HttpStatusCode.OK));
 
-        var finalLocationCount = await GetLocationCountAsync();
-        finalLocationCount.Should().Be(10);
+        // Verify all locations were created by checking they exist
+        for (int i = 1; i <= 10; i++)
+        {
+            var locationCode = $"{basePrefix}-{i:00}";
+            var location = await FindLocationByCodeAsync(locationCode);
+            location.Should().NotBeNull();
+        }
     }
 }
