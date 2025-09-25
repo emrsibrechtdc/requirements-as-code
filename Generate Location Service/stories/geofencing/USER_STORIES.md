@@ -83,17 +83,18 @@
 **So that** users can see which warehouse/store they're at
 
 **Acceptance Criteria:**
-- [ ] GetLocationByCoordinatesQuery accepts latitude, longitude, optional product filter
+- [ ] GetLocationByCoordinatesQuery accepts latitude and longitude parameters
 - [ ] Query returns single location containing the coordinates (if any)
 - [ ] If multiple locations contain coordinates, return closest to center
-- [ ] Query respects multi-product data filtering
+- [ ] Platform.Shared automatically applies product data filtering based on caller context
 - [ ] Returns null if no location contains the coordinates
 - [ ] Query handler uses spatial database functions for performance
 
 **Example Usage:**
 ```
-GET /locations/by-coordinates?lat=41.8781&lng=-87.6298&product=ColdChain
+GET /locations/by-coordinates?lat=41.8781&lng=-87.6298
 Response: LocationDto for "WAREHOUSE_CHI_001" (or null if none found)
+Note: Only returns locations accessible to the authenticated caller's product
 ```
 
 ### Story 3.2: Nearby Location Search
@@ -106,13 +107,14 @@ Response: LocationDto for "WAREHOUSE_CHI_001" (or null if none found)
 - [ ] Returns locations ordered by distance (closest first)
 - [ ] Supports limiting results (default 10, max 100)
 - [ ] Includes distance in response for each location
-- [ ] Respects product filtering and active location status
+- [ ] Platform.Shared automatically applies product filtering and active location status
 - [ ] Performance optimized with spatial indexes
 
 **Example Usage:**
 ```
 GET /locations/nearby?lat=41.8781&lng=-87.6298&radius=5000&maxResults=5
 Response: Array of LocationDto with distance field
+Note: Only returns locations accessible to the authenticated caller's product
 ```
 
 ### Story 3.3: Enhanced Location Registration
@@ -138,10 +140,11 @@ Response: Array of LocationDto with distance field
 **So that** I can integrate location services with mobile and IoT applications
 
 **Acceptance Criteria:**
-- [ ] GET /locations/by-coordinates?lat={lat}&lng={lng}[&product={product}]
+- [ ] GET /locations/by-coordinates?lat={lat}&lng={lng}
 - [ ] GET /locations/nearby?lat={lat}&lng={lng}&radius={meters}&maxResults={count}
 - [ ] PUT /locations/{locationCode}/coordinates with lat/lng/radius in body
 - [ ] All endpoints follow existing API patterns (versioning, auth, error handling)
+- [ ] Platform.Shared automatically handles product context from authenticated caller
 - [ ] OpenAPI documentation updated with new endpoints
 - [ ] Consistent error responses for invalid coordinates
 
@@ -278,10 +281,10 @@ Response: Array of LocationDto with distance field
 **So that** coordinates only match locations within my product context
 
 **Acceptance Criteria:**
-- [ ] All coordinate queries filter by product context
-- [ ] Geofencing respects existing multi-product architecture
-- [ ] Cross-product coordinate queries are prevented
-- [ ] Product-specific geofence configurations supported
+- [ ] Platform.Shared automatically filters coordinate queries by caller's product context
+- [ ] Geofencing respects existing multi-product architecture through Platform.Shared data filters
+- [ ] Cross-product coordinate queries are automatically prevented by the framework
+- [ ] Product-specific geofence configurations supported through automatic context application
 
 ### Story: Coordinate Data Security
 **As a** security administrator  

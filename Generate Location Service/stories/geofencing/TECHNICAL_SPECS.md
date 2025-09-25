@@ -195,8 +195,7 @@ public class Location : FullyAuditedActivableAggregateRoot<Guid>
 // Coordinate-based location lookup
 public record GetLocationByCoordinatesQuery(
     decimal Latitude, 
-    decimal Longitude, 
-    string? Product = null
+    decimal Longitude
 ) : IQuery<LocationDto?>;
 
 // Nearby locations search
@@ -204,8 +203,7 @@ public record GetNearbyLocationsQuery(
     decimal Latitude,
     decimal Longitude, 
     double RadiusMeters = 5000,
-    int MaxResults = 10,
-    string? Product = null
+    int MaxResults = 10
 ) : IQuery<List<LocationWithDistanceDto>>;
 
 // Update coordinates command
@@ -280,13 +278,13 @@ public interface ILocationRepository : IRepository<Location, Guid>
     // Existing methods...
     
     // New coordinate-based methods
-    Task<Location?> GetLocationByCoordinatesAsync(decimal latitude, decimal longitude, string? product = null, CancellationToken cancellationToken = default);
+    Task<Location?> GetLocationByCoordinatesAsync(decimal latitude, decimal longitude, CancellationToken cancellationToken = default);
     
-    Task<List<Location>> GetNearbyLocationsAsync(decimal latitude, decimal longitude, double radiusMeters, int maxResults, string? product = null, CancellationToken cancellationToken = default);
+    Task<List<Location>> GetNearbyLocationsAsync(decimal latitude, decimal longitude, double radiusMeters, int maxResults, CancellationToken cancellationToken = default);
     
-    Task<List<Location>> GetLocationsWithoutCoordinatesAsync(string? product = null, int batchSize = 100, CancellationToken cancellationToken = default);
+    Task<List<Location>> GetLocationsWithoutCoordinatesAsync(int batchSize = 100, CancellationToken cancellationToken = default);
     
-    Task<int> CountLocationsWithCoordinatesAsync(string? product = null, CancellationToken cancellationToken = default);
+    Task<int> CountLocationsWithCoordinatesAsync(CancellationToken cancellationToken = default);
 }
 ```
 
@@ -300,20 +298,15 @@ public class LocationRepository : EfCoreRepository<Location, Guid, LocationsDbCo
     public async Task<Location?> GetLocationByCoordinatesAsync(
         decimal latitude, 
         decimal longitude, 
-        string? product = null, 
         CancellationToken cancellationToken = default)
     {
         var point = $"POINT({longitude} {latitude})"; // Note: longitude first in WKT
         
+        // Platform.Shared automatically applies product filtering through data filters
         var query = Context.Set<Location>()
             .Where(l => !l.IsDeleted && l.IsActive)
             .Where(l => l.Latitude != null && l.Longitude != null && l.GeofenceRadius != null)
             .Where(l => l.ComputedCoordinates.STDistance(SqlServerDbFunctionsExtensions.Geography.Parse(point)) <= l.GeofenceRadius);
-            
-        if (!string.IsNullOrEmpty(product))
-        {
-            query = query.Where(l => l.Product == product);
-        }
         
         // If multiple locations contain the point, return the closest to center
         return await query
@@ -326,20 +319,15 @@ public class LocationRepository : EfCoreRepository<Location, Guid, LocationsDbCo
         decimal longitude, 
         double radiusMeters, 
         int maxResults, 
-        string? product = null, 
         CancellationToken cancellationToken = default)
     {
         var point = $"POINT({longitude} {latitude})";
         
+        // Platform.Shared automatically applies product filtering through data filters
         var query = Context.Set<Location>()
             .Where(l => !l.IsDeleted && l.IsActive)
             .Where(l => l.Latitude != null && l.Longitude != null)
             .Where(l => l.ComputedCoordinates.STDistance(SqlServerDbFunctionsExtensions.Geography.Parse(point)) <= radiusMeters);
-            
-        if (!string.IsNullOrEmpty(product))
-        {
-            query = query.Where(l => l.Product == product);
-        }
         
         return await query
             .OrderBy(l => l.ComputedCoordinates.STDistance(SqlServerDbFunctionsExtensions.Geography.Parse(point)))
@@ -348,18 +336,13 @@ public class LocationRepository : EfCoreRepository<Location, Guid, LocationsDbCo
     }
     
     public async Task<List<Location>> GetLocationsWithoutCoordinatesAsync(
-        string? product = null, 
         int batchSize = 100, 
         CancellationToken cancellationToken = default)
     {
+        // Platform.Shared automatically applies product filtering through data filters
         var query = Context.Set<Location>()
             .Where(l => !l.IsDeleted)
             .Where(l => l.Latitude == null || l.Longitude == null);
-            
-        if (!string.IsNullOrEmpty(product))
-        {
-            query = query.Where(l => l.Product == product);
-        }
         
         return await query
             .Take(batchSize)
@@ -373,25 +356,24 @@ public class LocationRepository : EfCoreRepository<Location, Guid, LocationsDbCo
 ### New REST Endpoints
 
 ```csharp
-// GET /locations/by-coordinates?lat={lat}&lng={lng}&product={product}
+// GET /locations/by-coordinates?lat={lat}&lng={lng}
 public static IEndpointRouteBuilder MapCoordinateLocationRoutes(this IEndpointRouteBuilder endpoints, ApiVersionSet apiVersionSet, bool authorizationRequired)
 {
     var getLocationByCoordinates = endpoints.MapGet("/locations/by-coordinates", 
         async (HttpContext context, 
                [FromQuery] decimal latitude, 
                [FromQuery] decimal longitude, 
-               [FromQuery] string? product, 
                ISender sender, 
                CancellationToken cancellationToken) =>
     {
-        var query = new GetLocationByCoordinatesQuery(latitude, longitude, product);
+        var query = new GetLocationByCoordinatesQuery(latitude, longitude);
         var result = await sender.Send(query, cancellationToken);
         return result != null ? TypedResults.Ok(result) : TypedResults.NotFound();
     })
     .WithApiVersionSet(apiVersionSet)
     .MapToApiVersion(1.0)
     .WithSummary("Get location containing specific coordinates")
-    .WithDescription("Returns the location that contains the given coordinates within its geofence boundary")
+    .WithDescription("Returns the location that contains the given coordinates within its geofence boundary. Product context is automatically applied based on caller identity.")
     .Produces<LocationDto>(StatusCodes.Status200OK)
     .Produces(StatusCodes.Status404NotFound)
     .Produces<ProblemDetails>(StatusCodes.Status400BadRequest)
@@ -403,18 +385,17 @@ public static IEndpointRouteBuilder MapCoordinateLocationRoutes(this IEndpointRo
                [FromQuery] decimal longitude,
                [FromQuery] double radiusMeters,
                [FromQuery] int maxResults,
-               [FromQuery] string? product,
                ISender sender,
                CancellationToken cancellationToken) =>
     {
-        var query = new GetNearbyLocationsQuery(latitude, longitude, radiusMeters, maxResults, product);
+        var query = new GetNearbyLocationsQuery(latitude, longitude, radiusMeters, maxResults);
         var result = await sender.Send(query, cancellationToken);
         return TypedResults.Ok(result);
     })
     .WithApiVersionSet(apiVersionSet)
     .MapToApiVersion(1.0)
     .WithSummary("Get nearby locations within radius")
-    .WithDescription("Returns locations within specified radius, ordered by distance")
+    .WithDescription("Returns locations within specified radius, ordered by distance. Product context is automatically applied based on caller identity.")
     .Produces<List<LocationWithDistanceDto>>(StatusCodes.Status200OK)
     .Produces<ProblemDetails>(StatusCodes.Status400BadRequest);
 

@@ -290,7 +290,7 @@ test/Platform.Locations.IntegrationTests/
 
 ### Database Operations
 ```sql
--- Check coordinate data coverage
+-- Check coordinate data coverage (admin/development query - shows all products)
 SELECT 
     Product,
     COUNT(*) as TotalLocations,
@@ -300,29 +300,34 @@ FROM Locations
 WHERE DeletedAt IS NULL
 GROUP BY Product;
 
--- Test spatial query performance
+-- Test spatial query performance (this will be filtered by product context in application)
 SET STATISTICS IO ON;
 DECLARE @point geography = geography::Point(41.8781, -87.6298, 4326);
 SELECT LocationCode, ComputedCoordinates.STDistance(@point) as Distance
 FROM Locations 
 WHERE ComputedCoordinates.STDistance(@point) <= 5000
+  AND DeletedAt IS NULL
+  AND IsActive = 1
 ORDER BY Distance;
+
+-- Note: In the application, Platform.Shared automatically adds
+-- Product = @CurrentProduct filter to all queries
 ```
 
 ### API Testing
 ```bash
-# Test coordinate lookup
+# Test coordinate lookup (product context determined by authentication)
 curl -X GET "https://localhost:7067/locations/by-coordinates?lat=41.8781&lng=-87.6298" \
-     -H "local-product: TestProduct"
+     -H "Authorization: Bearer YOUR_JWT_TOKEN"
 
-# Test nearby search
+# Test nearby search (product context determined by authentication)
 curl -X GET "https://localhost:7067/locations/nearby?lat=41.8781&lng=-87.6298&radius=5000&maxResults=5" \
-     -H "local-product: TestProduct"
+     -H "Authorization: Bearer YOUR_JWT_TOKEN"
 
-# Register location with coordinates
+# Register location with coordinates (product context determined by authentication)
 curl -X POST "https://localhost:7067/locations/register" \
      -H "Content-Type: application/json" \
-     -H "local-product: TestProduct" \
+     -H "Authorization: Bearer YOUR_JWT_TOKEN" \
      -d '{
        "locationCode": "TEST001",
        "locationTypeCode": "WAREHOUSE",
@@ -335,6 +340,9 @@ curl -X POST "https://localhost:7067/locations/register" \
        "longitude": -87.6298,
        "geofenceRadius": 100
      }'
+
+# Note: In development, you may use the local-product header for testing:
+# -H "local-product: TestProduct"```
 ```
 
 ## Troubleshooting Common Issues
@@ -345,9 +353,10 @@ curl -X POST "https://localhost:7067/locations/register" \
 - Verify GEOGRAPHY data type usage (not GEOMETRY)
 
 ### Performance Issues
-- Ensure product filtering in all spatial queries
-- Monitor query execution plans for index usage
+- Platform.Shared automatically applies product filtering - no manual intervention needed
+- Monitor query execution plans to ensure spatial index usage
 - Consider coordinate data caching for frequently accessed locations
+- Verify Platform.Shared data filters are working correctly in query plans
 
 ### Geocoding Service Issues
 - Check Azure Maps API key and quota
