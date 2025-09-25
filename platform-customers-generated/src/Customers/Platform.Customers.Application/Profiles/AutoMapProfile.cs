@@ -23,7 +23,12 @@ public class AutoMapProfile : Profile
             .ForMember(dest => dest.FullAddress, opt => opt.MapFrom(src => src.Address.FullAddress));
 
         CreateMap<Customer, CustomerResponse>()
-            .ForMember(dest => dest.ContactFullName, opt => opt.MapFrom(src => src.ContactInfo.FullName))
-            .ForMember(dest => dest.Email, opt => opt.MapFrom(src => src.ContactInfo.Email));
+            .ForCtorParam("CustomerCode", opt => opt.MapFrom(src => src.CustomerCode))
+            .ForCtorParam("CompanyName", opt => opt.MapFrom(src => src.CompanyName))
+            .ForCtorParam("ContactFullName", opt => opt.MapFrom(src => src.ContactInfo.FullName))
+            .ForCtorParam("Email", opt => opt.MapFrom(src => src.ContactInfo.Email))
+            .ForCtorParam("IsActive", opt => opt.MapFrom(src => src.IsActive))
+            .ForCtorParam("CreatedAt", opt => opt.MapFrom(src => src.CreatedAt.DateTime))
+            .ForCtorParam("CreatedBy", opt => opt.MapFrom(src => src.CreatedBy ?? string.Empty));
     }
 }
