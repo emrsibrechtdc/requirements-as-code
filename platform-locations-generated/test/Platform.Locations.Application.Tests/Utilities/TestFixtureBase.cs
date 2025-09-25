@@ -5,6 +5,8 @@ using Platform.Locations.Application.Profiles;
 using Platform.Locations.Domain.Locations;
 using Platform.Shared.IntegrationEvents;
 using FluentValidation;
+using Platform.Shared.DataLayer;
+using Platform.Shared.Ddd.Domain.Entities;
 
 namespace Platform.Locations.Application.Tests.Utilities;
 
@@ -12,6 +14,7 @@ public abstract class TestFixtureBase
 {
     protected readonly Mock<ILocationRepository> MockLocationRepository;
     protected readonly Mock<IIntegrationEventPublisher> MockEventPublisher;
+    protected readonly Mock<IDataFilter<IActivable>> MockActivableDataFilter = new();
     protected readonly IMapper Mapper;
     
     protected TestFixtureBase()

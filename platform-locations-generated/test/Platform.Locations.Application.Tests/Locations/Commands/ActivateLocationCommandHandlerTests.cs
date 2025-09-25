@@ -18,7 +18,7 @@ public class ActivateLocationCommandHandlerTests : TestFixtureBase
             MockLocationRepository.Object,
             validator,
             Mapper,
-            MockEventPublisher.Object);
+            MockEventPublisher.Object, MockActivableDataFilter.Object);
     }
 
     [Fact]
