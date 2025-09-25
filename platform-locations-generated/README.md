@@ -52,13 +52,17 @@ Platform.Locations/
 │       ├── Platform.Locations.HttpApi/             # HTTP API Layer
 │       ├── Platform.Locations.Application/         # Application Layer
 │       └── Platform.Locations.Infrastructure/      # Infrastructure Layer
-└── test/ (to be created)
-    ├── Core/
-    │   └── Platform.Locations.Domain.UnitTests/
-    ├── Locations/
-    │   ├── Platform.Locations.Application.UnitTests/
-    │   └── Platform.Locations.Infrastructure.IntegrationTests/
-    └── Platform.Locations.ApiClient.IntegrationTests/
+└── test/ ✅ IMPLEMENTED
+    ├── Platform.Locations.Application.Tests/      # Unit Tests
+    │   ├── CommandHandlers/                       # Command handler tests
+    │   ├── QueryHandlers/                         # Query handler tests  
+    │   ├── Validators/                             # Input validation tests
+    │   └── Utilities/                              # Test utilities
+    └── Platform.Locations.IntegrationTests/       # Integration Tests
+        ├── Api/                                    # HTTP API endpoint tests
+        ├── CommandHandlers/                        # Command handler integration tests
+        ├── Infrastructure/                         # Test base classes
+        └── Repositories/                           # Repository integration tests
 ```
 
 ## Getting Started
@@ -300,16 +304,80 @@ This implementation follows the Copeland Platform API Development Guidelines v2.
 - Integration events for decoupled communication
 - Multi-product support with automatic data segregation
 
+## Testing Strategy
+
+The service includes comprehensive unit and integration tests following enterprise-grade best practices. See [API Development and Testing Guidelines](API_DEVELOPMENT_AND_TESTING_GUIDELINES.md) for detailed testing standards.
+
+### Test Projects
+
+- **Platform.Locations.Application.Tests** - Unit tests for application logic
+- **Platform.Locations.IntegrationTests** - API and database integration tests
+
+### Key Testing Improvements Implemented
+
+#### 1. HTTP API Data Seeding
+Integration tests use the actual HTTP registration endpoint instead of direct database seeding:
+```bash
+# ✅ Uses registration endpoint - ensures multi-product setup
+POST /locations/register
+{
+  "locationCode": "TEST-A1B2C3D4",
+  "locationTypeCode": "WAREHOUSE",
+  // ... other properties
+}
+```
+
+**Benefits:**
+- Ensures multi-product data filtering works correctly
+- Validates complete application layer logic
+- Tests actual API contracts
+- Prevents `Product` field initialization issues
+
+#### 2. Unique Test Data Strategy
+All tests use unique identifiers to prevent conflicts:
+```csharp
+var locationCode = $"TEST-{Guid.NewGuid().ToString("N")[..8].ToUpper()}";
+// Results in: "TEST-A1B2C3D4"
+```
+
+**Benefits:**
+- Eliminates test interference and race conditions
+- Enables parallel test execution
+- No database cleanup required between tests
+
+#### 3. HTTP Status Code Standards
+Tests validate proper HTTP status codes for different scenarios:
+- **400 Bad Request**: Input validation failures (invalid JSON, missing fields)
+- **422 Unprocessable Entity**: Business rule violations (duplicate codes, invalid state transitions)
+- **200 OK**: Successful operations
+- **201 Created**: Resource creation
+
+### Running Tests
+
+```bash
+# Run all tests
+dotnet test
+
+# Run only unit tests
+dotnet test --filter "Category=Unit"
+
+# Run only integration tests
+dotnet test test/Platform.Locations.IntegrationTests
+
+# Run with detailed output
+dotnet test --verbosity normal
+```
+
 ## Next Steps
 
 To complete the service implementation:
-1. Add unit tests for domain logic
-2. Add integration tests for API endpoints  
-3. Add application service unit tests
-4. Configure CI/CD pipelines
-5. Set up production monitoring and alerting
-6. Add API client library generation
-7. Configure authentication and authorization for production
+1. ✅ **Testing Strategy** - Comprehensive unit and integration tests implemented
+2. Configure CI/CD pipelines with automated testing
+3. Set up production monitoring and alerting
+4. Add API client library generation
+5. Configure authentication and authorization for production
+6. Add performance testing and load testing
+7. Implement health checks and metrics collection
 
 ## Support
 

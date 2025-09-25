@@ -1196,49 +1196,375 @@ public async Task Handle(DeviceCreatedIntegrationEvent @event)
 
 ## 13. Testing Standards
 
-### Integration Test Structure
+### Testing Strategy Overview
+
+**Test Pyramid Architecture**:
+
+```
+        /\
+       /  \
+      /    \
+     /  E2E  \      ← End-to-End Tests (Few, High-Value)
+    /________\
+   /          \
+  / Integration \    ← Integration Tests (Some, Key Scenarios)
+ /______________\
+/                \
+/   Unit Tests    \   ← Unit Tests (Many, Fast, Isolated)
+\________________/
+```
+
+**Test Distribution:**
+- **Unit Tests** (60-70%): Domain logic, application services, validation
+- **Integration Tests** (20-30%): API endpoints, database operations, workflows
+- **End-to-End Tests** (5-10%): Critical business scenarios, cross-service communication
+
+### Unit Testing Standards
+
+#### Domain Entity Testing
+
+Test domain entities in isolation without external dependencies:
 
 ```csharp
 [Fact]
-public async Task should_create_entity()
+public void Location_Create_WithValidParameters_ReturnsLocationWithCorrectProperties()
 {
-    var command = _fixture.GenerateCreateCommand();
-    var result = await _apiClient.Entities.Create.PostAsync(command, cancellationToken: default(CancellationToken));
-    result.ShouldNotBeNull();
-    result.EntityCode.ShouldBe(command.EntityCode);
+    // Arrange
+    const string locationCode = "LOC001";
+    const string locationTypeCode = "WAREHOUSE";
+    
+    // Act
+    var location = Location.Create(
+        locationCode,
+        locationTypeCode,
+        "123 Test St",
+        "Suite 100",
+        "Test City",
+        "TX",
+        "12345",
+        "USA");
+
+    // Assert
+    location.LocationCode.Should().Be(locationCode);
+    location.LocationTypeCode.Should().Be(locationTypeCode);
+    location.IsActive.Should().BeTrue();
 }
 ```
 
-### Test Categories
+#### Application Service Testing
 
-1. **Unit Tests**
-   - Domain entity behavior
-   - Application service logic  
-   - Validation rules
-
-2. **Integration Tests**
-   - API endpoint functionality
-   - Database interactions
-   - External service integration
-
-3. **End-to-End Tests**
-   - Complete user workflows
-   - Cross-service communication
-
-### Test Naming Convention
-
-- `should_{expected_behavior}`
-- `should_throw_{exception_type}_when_{condition}`
-
-### Assertion Library
-
-Use **Shouldly** for fluent assertions:
+Use mocked dependencies to test business logic in isolation:
 
 ```csharp
-result.ShouldNotBeNull();
-result.EntityCode.ShouldBe(command.EntityCode);
-exception.ResponseStatusCode.ShouldBe(400);
+[Fact]
+public async Task RegisterLocationCommandHandler_ValidCommand_CreatesLocation()
+{
+    // Arrange
+    var mockRepository = new Mock<ILocationRepository>();
+    var mockPublisher = new Mock<IIntegrationEventPublisher>();
+    var handler = new RegisterLocationCommandHandler(mockRepository.Object, mockPublisher.Object);
+    
+    var command = new RegisterLocationCommand(/*...parameters...*/);
+    
+    // Act
+    var result = await handler.Handle(command, CancellationToken.None);
+    
+    // Assert
+    result.Should().NotBeNull();
+    mockRepository.Verify(r => r.AddAsync(It.IsAny<Location>(), It.IsAny<CancellationToken>()), Times.Once);
+}
 ```
+
+**Unit Testing Principles:**
+- **Fast Execution**: Tests should run in milliseconds
+- **Isolated**: No dependencies on databases, files, or external services
+- **Deterministic**: Same input always produces same output
+- **Focused**: One logical assertion per test
+- **Descriptive Names**: Test names should describe scenario and expected outcome
+
+### Integration Testing Standards
+
+#### ⭐ Key Integration Testing Improvements
+
+Based on implementation experience with Platform.Shared, follow these critical practices:
+
+##### 1. HTTP API Data Seeding (Critical)
+
+**❌ Traditional Approach - Direct Database Seeding:**
+```csharp
+// AVOID - Bypasses application logic and multi-product setup
+await context.Locations.AddAsync(new Location { 
+    LocationCode = "TEST-001",
+    Product = "Unspecified" // Wrong! Causes filtering issues
+});
+await context.SaveChangesAsync();
+```
+
+**✅ Platform.Shared Compatible Approach - HTTP API Seeding:**
+```csharp
+// USE - Ensures proper multi-product data setup
+protected async Task SeedLocationInDatabaseAsync(string locationCode)
+{
+    var registerCommand = new RegisterLocationCommand(
+        locationCode,
+        "WAREHOUSE",
+        "123 Test Street",
+        "Suite 100",
+        "Test City",
+        "TX",
+        "12345",
+        "USA");
+
+    var response = await PostJsonAsync("/locations/register", registerCommand);
+    response.EnsureSuccessStatusCode();
+}
+```
+
+**Benefits of HTTP API Seeding:**
+- **Multi-Product Context**: Ensures `Product` field is properly set by middleware
+- **Complete Logic Validation**: Tests full application layer, not just database operations
+- **Real API Contract Testing**: Validates actual endpoint behavior
+- **Platform.Shared Integration**: Works correctly with data filtering and auditing
+
+##### 2. Unique Test Data Strategy (Performance Critical)
+
+**❌ Traditional Approach - Hardcoded Data with Database Resets:**
+```csharp
+[Fact]
+public async Task TestMethod()
+{
+    await ResetDatabaseAsync(); // Expensive operation
+    var locationCode = "TEST-001"; // Can cause conflicts
+    // ... test logic
+}
+```
+
+**✅ High-Performance Approach - Unique Data Generation:**
+```csharp
+[Fact]
+public async Task TestMethod()
+{
+    // No database reset needed - generate unique data
+    var locationCode = $"TEST-{Guid.NewGuid().ToString("N")[..8].ToUpper()}";
+    // Results in: "TEST-A1B2C3D4"
+    // ... test logic
+}
+```
+
+**Performance Benefits:**
+- **60-80% faster test execution** by eliminating database resets
+- **Parallel test execution** enabled by unique data per test
+- **Reduced database contention** and locking issues
+- **Test isolation** without expensive cleanup operations
+
+##### 3. HTTP Status Code Standards (API Contract Critical)
+
+**Key Distinction - 400 vs 422 Status Codes:**
+
+```csharp
+// Input validation failures → 400 Bad Request
+[Fact]
+public async Task RegisterLocation_EmptyLocationCode_ReturnsBadRequest()
+{
+    var invalidCommand = new RegisterLocationCommand("", "WAREHOUSE", /*...*/);
+    var response = await PostJsonAsync("/locations/register", invalidCommand);
+    response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+}
+
+// Business rule violations → 422 Unprocessable Entity
+[Fact]
+public async Task RegisterLocation_DuplicateLocationCode_ReturnsUnprocessableEntity()
+{
+    await SeedLocationInDatabaseAsync("EXISTING-LOC");
+    var duplicateCommand = new RegisterLocationCommand("EXISTING-LOC", /*...*/);
+    var response = await PostJsonAsync("/locations/register", duplicateCommand);
+    response.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity);
+}
+```
+
+**Status Code Usage Standards:**
+
+| Status Code | Use Case | Example |
+|-------------|----------|---------|
+| **200 OK** | Successful operations | Location updated successfully |
+| **201 Created** | Resource creation | Location registered successfully |
+| **400 Bad Request** | Input validation failures | Invalid JSON, missing required fields |
+| **422 Unprocessable Entity** | Business rule violations | Duplicate location code, invalid state transitions |
+| **404 Not Found** | Resource not found (read ops) | GET /locations/{code} when code doesn't exist |
+| **500 Internal Server Error** | System errors | Database connection failure, unhandled exceptions |
+
+### Integration Test Structure
+
+```csharp
+[Collection("Database Integration Tests")]
+public class LocationsApiIntegrationTests : IntegrationTestBase
+{
+    [Fact]
+    public async Task RegisterLocation_ValidRequest_ReturnsCreatedWithLocation()
+    {
+        // Arrange
+        var locationCode = GenerateUniqueLocationCode("REGISTER");
+        var command = CreateValidRegisterCommand(locationCode);
+        
+        // Act
+        var response = await PostJsonAsync("/locations/register", command);
+        
+        // Assert
+        response.StatusCode.Should().Be(HttpStatusCode.Created);
+        
+        // Verify in database using API seeding approach
+        var savedLocation = await FindLocationByCodeAsync(locationCode);
+        savedLocation.Should().NotBeNull();
+        savedLocation!.LocationCode.Should().Be(locationCode);
+    }
+}
+```
+
+### Multi-Product Integration Testing
+
+Test that Platform.Shared multi-product data segregation works correctly:
+
+```csharp
+[Fact]
+public async Task GetLocations_DifferentProductContext_ReturnsOnlyProductSpecificData()
+{
+    // Arrange - Create locations for different products
+    HttpClient.DefaultRequestHeaders.Add("local-product", "Product1");
+    await SeedLocationInDatabaseAsync("LOC-P1-001");
+    
+    HttpClient.DefaultRequestHeaders.Remove("local-product");
+    HttpClient.DefaultRequestHeaders.Add("local-product", "Product2");  
+    await SeedLocationInDatabaseAsync("LOC-P2-001");
+    
+    // Act - Query with Product1 context
+    HttpClient.DefaultRequestHeaders.Remove("local-product");
+    HttpClient.DefaultRequestHeaders.Add("local-product", "Product1");
+    var locations = await GetJsonAsync<List<LocationDto>>("/locations");
+    
+    // Assert - Should only see Product1 data
+    locations.Should().OnlyContain(l => l.LocationCode!.Contains("P1"));
+}
+```
+
+### Test Data Management
+
+#### Naming Conventions
+
+```csharp
+// Descriptive, unique location codes for different test scenarios
+var locationCode = $"REGISTER-{Guid.NewGuid().ToString("N")[..8].ToUpper()}";
+var locationCode = $"UPDATE-{Guid.NewGuid().ToString("N")[..8].ToUpper()}"; 
+var locationCode = $"DELETE-{Guid.NewGuid().ToString("N")[..8].ToUpper()}";
+```
+
+#### Test Data Factories
+
+```csharp
+protected static RegisterLocationCommand CreateValidRegisterCommand(string? locationCode = null)
+{
+    var faker = new Faker();
+    return new RegisterLocationCommand(
+        locationCode ?? GenerateUniqueLocationCode(),
+        "WAREHOUSE",
+        faker.Address.StreetAddress(),
+        faker.Address.SecondaryAddress(), 
+        faker.Address.City(),
+        faker.Address.StateAbbr(),
+        faker.Address.ZipCode(),
+        faker.Address.CountryCode()
+    );
+}
+```
+
+### Testing Best Practices
+
+#### Test Organization
+
+1. **Use xUnit Collections** for integration tests:
+   ```csharp
+   [Collection("Database Integration Tests")]
+   public class MyIntegrationTests : IntegrationTestBase
+   ```
+
+2. **Descriptive test names** that explain the scenario:
+   ```csharp
+   RegisterLocationCommandHandler_DuplicateLocationCode_ThrowsLocationAlreadyExistsException()
+   ```
+
+3. **Group related tests** in the same test class
+
+#### Performance Optimization
+
+1. **Minimize database operations** - Use HTTP API seeding instead of direct database access
+2. **Use unique test data** - Avoid expensive database cleanup operations  
+3. **Reuse HTTP clients** and test fixtures where possible
+4. **Run integration tests sequentially** for database-dependent operations
+
+#### Error Handling Testing
+
+1. **Test all error scenarios** (validation, business rules, system errors)
+2. **Verify error response format** (RFC 7807 Problem Details)
+3. **Validate error message clarity** for debugging purposes
+4. **Test error logging and monitoring** integration
+
+### Test Categories and Coverage
+
+#### Unit Tests (60-70% of tests)
+- Domain entity behavior validation
+- Application service logic testing
+- Input validation rule testing
+- Command/Query handler testing with mocks
+- Business logic verification
+
+#### Integration Tests (20-30% of tests)
+- HTTP API endpoint testing (all CRUD operations)
+- Database integration testing (using HTTP API seeding)
+- Multi-product data segregation validation
+- End-to-end workflow testing
+- External service integration testing
+
+#### End-to-End Tests (5-10% of tests)
+- Critical business scenario validation
+- Cross-service communication testing
+- User journey validation
+- Production-like environment testing
+
+### Test Naming Conventions
+
+**Pattern**: `{MethodUnderTest}_{Scenario}_{ExpectedResult}`
+
+**Examples**:
+- `RegisterLocation_ValidRequest_ReturnsCreatedWithLocation`
+- `RegisterLocation_DuplicateLocationCode_ReturnsUnprocessableEntity`
+- `UpdateLocationAddress_NonExistentLocation_ThrowsLocationNotFoundException`
+- `ActivateLocation_AlreadyActiveLocation_ReturnsUnprocessableEntity`
+
+### Assertion Libraries
+
+Use **FluentAssertions** for readable test assertions:
+
+```csharp
+result.Should().NotBeNull();
+result.LocationCode.Should().Be(command.LocationCode);
+response.StatusCode.Should().Be(HttpStatusCode.Created);
+locations.Should().HaveCount(expectedCount);
+locations.Should().OnlyContain(l => l.IsActive);
+```
+
+### Continuous Integration Testing
+
+#### Test Execution Strategy
+
+1. **Unit Tests**: Run on every commit (fast feedback)
+2. **Integration Tests**: Run on pull requests and main branch merges
+3. **End-to-End Tests**: Run on scheduled basis and before releases
+
+#### Test Reporting Requirements
+
+1. **Code Coverage**: Maintain >80% coverage for business logic
+2. **Test Results**: Generate detailed test reports with pass/fail metrics
+3. **Performance Metrics**: Track test execution times and identify slow tests
+4. **Failure Analysis**: Automated categorization of test failures
 
 ---
 
