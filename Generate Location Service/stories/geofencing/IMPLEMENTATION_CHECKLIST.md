@@ -15,26 +15,27 @@
 - [ ] Postman or similar API testing tool
 - [ ] Git for source control
 
-## Phase 1: Database Schema Enhancement (1-2 days)
+## Phase 1: Database Schema Enhancement (1 day)
 
-### Database Changes
-- [ ] **Create migration script** for new columns
+### Database Changes (Declarative SQL Project Approach)
+- [ ] **Update Locations.sql table definition** with new columns
   - [ ] `Latitude DECIMAL(10,8) NULL`
   - [ ] `Longitude DECIMAL(11,8) NULL`
   - [ ] `GeofenceRadius FLOAT NULL`
   - [ ] `ComputedCoordinates` computed column
-- [ ] **Create spatial indexes**
+- [ ] **Add spatial indexes** to table definition
   - [ ] Primary spatial index on `ComputedCoordinates`
   - [ ] Composite index on `Product + coordinates`
-- [ ] **Test migration script** on development database
-- [ ] **Create rollback script** for safety
-- [ ] **Update Entity Framework configuration**
-  - [ ] Add coordinate properties to `LocationConfiguration.cs`
-  - [ ] Configure computed column mapping
+- [ ] **Build SQL Database Project**
+  - [ ] `dotnet build src/Database/Platform.Locations.Database/Platform.Locations.Database.csproj`
+- [ ] **Deploy DACPAC to development database**
+  - [ ] Use SqlPackage.exe to publish schema changes
+- [ ] **Verify schema changes applied**
+  - [ ] Check columns and indexes exist in database
 
 ### Files to Modify
 ```
-src/Database/Platform.Locations.Database/Tables/Locations_Migration.sql (new)
+src/Database/Platform.Locations.Database/Tables/Locations.sql (update existing)
 src/Locations/Platform.Locations.Infrastructure/Configurations/LocationConfiguration.cs
 ```
 
@@ -252,10 +253,12 @@ test/Platform.Locations.IntegrationTests/
 - [ ] **Monitoring and alerting ready**
 
 ### Deployment Steps
-- [ ] **Deploy database changes**
+- [ ] **Build and deploy database schema**
+  - [ ] `dotnet build src/Database/Platform.Locations.Database/Platform.Locations.Database.csproj`
+  - [ ] `SqlPackage.exe /Action:Publish /SourceFile:"src/Database/Platform.Locations.Database/bin/Debug/Platform.Locations.Database.dacpac" /TargetServerName:"(localdb)\\mssqllocaldb" /TargetDatabaseName:"Platform.Locations"`
 - [ ] **Deploy application code**
-- [ ] **Configure Azure Maps settings**
-- [ ] **Start coordinate population service**
+- [ ] **Configure Azure Maps settings** (if implementing geocoding)
+- [ ] **Start coordinate population service** (if implementing background geocoding)
 - [ ] **Validate new endpoints**
 - [ ] **Monitor performance metrics**
 

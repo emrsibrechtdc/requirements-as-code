@@ -13,27 +13,33 @@ This implementation plan adds geofencing capabilities to the Platform Location S
 ## Implementation Phases
 
 ### Phase 1: Database Schema Enhancement
-**Duration**: 1-2 days
+**Duration**: 1 day
 **Priority**: High
 
-#### 1.1 Schema Updates
-- Add coordinate fields to Locations table
-- Implement spatial indexing for performance
-- Create computed columns for SQL Server spatial operations
+#### 1.1 Schema Updates (SQL Database Project Approach)
+- Update existing Locations.sql table definition with coordinate fields
+- Add spatial indexing directly to table definition
+- Include computed columns for SQL Server spatial operations
+- Build and deploy DACPAC to update database schema
 
 #### 1.2 Deliverables
-- [ ] Database migration scripts
-- [ ] Updated Entity Framework configuration
-- [ ] Database indexes for spatial queries
-- [ ] Rollback scripts for safety
+- [ ] Updated Locations.sql table definition
+- [ ] Spatial indexes added to table definition
+- [ ] DACPAC built and deployed successfully
+- [ ] Entity Framework configuration updated
+- [ ] Schema changes verified in database
 
 #### 1.3 Technical Details
 ```sql
--- New fields to add
-[Latitude] DECIMAL(10, 8) NULL,
-[Longitude] DECIMAL(11, 8) NULL, 
-[GeofenceRadius] FLOAT NULL,
-[ComputedCoordinates] AS geography::Point([Latitude], [Longitude], 4326) PERSISTED
+-- Updated table definition in Locations.sql
+CREATE TABLE [dbo].[Locations] (
+    -- ... existing columns ...
+    [Latitude] DECIMAL(10, 8) NULL,
+    [Longitude] DECIMAL(11, 8) NULL, 
+    [GeofenceRadius] FLOAT NULL,
+    [ComputedCoordinates] AS geography::Point([Latitude], [Longitude], 4326) PERSISTED,
+    -- ... constraints and indexes ...
+);
 ```
 
 ---
@@ -89,8 +95,8 @@ public class Location : FullyAuditedActivableAggregateRoot<Guid>
 
 #### 3.3 New Application Components
 ```csharp
-// New Query
-public record GetLocationByCoordinatesQuery(decimal Latitude, decimal Longitude, string? Product = null) 
+// New Query - Platform.Shared handles product context automatically
+public record GetLocationByCoordinatesQuery(decimal Latitude, decimal Longitude) 
     : IQuery<LocationDto?>;
 
 // Extended Command
@@ -124,12 +130,11 @@ public record RegisterLocationCommand(
 
 #### 4.3 New API Endpoints
 ```csharp
-// Coordinate-based lookup
+// Coordinate-based lookup - Platform.Shared handles product context from authentication
 [HttpGet("/locations/by-coordinates")]
 public async Task<ActionResult<LocationDto?>> GetLocationByCoordinates(
     [FromQuery] decimal latitude,
-    [FromQuery] decimal longitude,
-    [FromQuery] string? product = null)
+    [FromQuery] decimal longitude)
 
 // Nearby locations
 [HttpGet("/locations/nearby")]
