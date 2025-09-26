@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using Platform.Locations.Domain.Locations;
 using Platform.Locations.Infrastructure.Data;
 using Platform.Shared.EntityFrameworkCore;
@@ -7,8 +8,11 @@ namespace Platform.Locations.Infrastructure.Repositories;
 
 public class LocationRepository : EfCoreRepository<Location, Guid, LocationsDbContext>, ILocationRepository
 {
-    public LocationRepository(LocationsDbContext context) : base(context)
+    private readonly ILogger<LocationRepository> _logger;
+    
+    public LocationRepository(LocationsDbContext context, ILogger<LocationRepository> logger) : base(context)
     {
+        _logger = logger;
     }
 
     public async Task<Location?> GetByLocationCodeAsync(string locationCode, CancellationToken cancellationToken = default)
@@ -36,42 +40,76 @@ public class LocationRepository : EfCoreRepository<Location, Guid, LocationsDbCo
     
     public async Task<Location?> GetLocationByCoordinatesAsync(decimal latitude, decimal longitude, CancellationToken cancellationToken = default)
     {
-        // Platform.Shared automatically applies product filtering through data filters
-        // Use raw SQL for spatial operations since EF Core spatial support with computed columns can be complex
-        var point = $"POINT({longitude} {latitude})"; // Note: longitude first in WKT
         
-        var location = await DbContext.Set<Location>()
-            .FromSqlRaw(@"
-                SELECT TOP(1) * FROM [Locations] l
-                WHERE l.[DeletedAt] IS NULL 
-                  AND l.[IsActive] = 1
-                  AND l.[Latitude] IS NOT NULL 
+        // Use hybrid approach: raw SQL to find candidate IDs, then LINQ for Platform.Shared filtering
+        // This works around EF Core parameter precision issues with spatial queries
+        
+        // Build SQL string with literal values to avoid parameter precision truncation
+        var sqlQuery = $@"
+                SELECT TOP(1) l.Id
+                FROM [Locations] l
+                WHERE l.[Latitude] IS NOT NULL 
                   AND l.[Longitude] IS NOT NULL 
                   AND l.[GeofenceRadius] IS NOT NULL
-                  AND l.[ComputedCoordinates].STDistance(geography::Parse({0})) <= l.[GeofenceRadius]
-                ORDER BY l.[ComputedCoordinates].STDistance(geography::Parse({0}))", point)
+                  AND l.[DeletedAt] IS NULL
+                  AND l.[IsActive] = 1
+                  AND l.[ComputedCoordinates].STDistance(geography::Point({latitude:F8}, {longitude:F8}, 4326)) <= l.[GeofenceRadius]
+                ORDER BY l.[ComputedCoordinates].STDistance(geography::Point({latitude:F8}, {longitude:F8}, 4326))";
+        
+        var candidateIds = await DbContext.Database
+            .SqlQueryRaw<Guid>(sqlQuery)
+            .ToListAsync(cancellationToken);
+            
+        if (!candidateIds.Any())
+        {
+            return null;
+        }
+        
+        // Query using regular LINQ to apply Platform.Shared filters properly
+        var location = await DbContext.Set<Location>()
+            .Where(l => candidateIds.Contains(l.Id))
             .FirstOrDefaultAsync(cancellationToken);
             
         return location;
     }
-    
     public async Task<IEnumerable<Location>> GetNearbyLocationsAsync(decimal latitude, decimal longitude, double radiusMeters, int maxResults, CancellationToken cancellationToken = default)
     {
-        // Platform.Shared automatically applies product filtering through data filters
-        var point = $"POINT({longitude} {latitude})";
+        // Use hybrid approach: raw SQL to find candidate IDs, then LINQ for Platform.Shared filtering
+        // This works around EF Core parameter precision issues with spatial queries
         
-        var locations = await DbContext.Set<Location>()
-            .FromSqlRaw(@"
-                SELECT TOP({1}) * FROM [Locations] l
-                WHERE l.[DeletedAt] IS NULL 
+        // Build SQL string with literal values to avoid parameter precision truncation
+        var sqlQuery = $@"
+                SELECT TOP({maxResults}) l.Id
+                FROM [Locations] l
+                WHERE l.[Latitude] IS NOT NULL 
+                  AND l.[Longitude] IS NOT NULL 
+                  AND l.[DeletedAt] IS NULL
                   AND l.[IsActive] = 1
-                  AND l.[Latitude] IS NOT NULL 
-                  AND l.[Longitude] IS NOT NULL
-                  AND l.[ComputedCoordinates].STDistance(geography::Parse({0})) <= {2}
-                ORDER BY l.[ComputedCoordinates].STDistance(geography::Parse({0}))", 
-                point, maxResults, radiusMeters)
+                  AND l.[ComputedCoordinates].STDistance(geography::Point({latitude:F8}, {longitude:F8}, 4326)) <= {radiusMeters}
+                ORDER BY l.[ComputedCoordinates].STDistance(geography::Point({latitude:F8}, {longitude:F8}, 4326))";
+        
+        var candidateIds = await DbContext.Database
+            .SqlQueryRaw<Guid>(sqlQuery)
             .ToListAsync(cancellationToken);
             
+        if (!candidateIds.Any())
+        {
+            return new List<Location>();
+        }
+        
+        // Query using regular LINQ to apply Platform.Shared filters properly
+        // Maintain the distance-based ordering by getting locations in ID order
+        var locations = new List<Location>();
+        foreach (var id in candidateIds)
+        {
+            var location = await DbContext.Set<Location>()
+                .FirstOrDefaultAsync(l => l.Id == id, cancellationToken);
+            if (location != null)
+            {
+                locations.Add(location);
+            }
+        }
+        
         return locations;
     }
     
