@@ -28,6 +28,8 @@ using Platform.Shared.Auditing.Extensions;
 using Platform.Shared.HttpApi.Extensions;
 using Platform.Shared.IntegrationEvents.Extensions;
 using Platform.Shared.MultiProduct.Extensions;
+using MediatR;
+using Platform.Shared.Exceptions;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -62,7 +64,9 @@ var app = builder.Build();
 app.UseCors();
 app.UseAuthentication();
 app.UseAuthorization();
-app.MapControllers();
+
+// Configure minimal API endpoints
+app.MapDeviceEndpoints();
 
 app.Run();
 ```
@@ -303,58 +307,198 @@ _eventPublisher.AddIntegrationEvent(integrationEvent);
 3. **Infrastructure-Level Routing**: Event routing and filtering happens at the infrastructure level using headers
 4. **Event Schema Simplicity**: Events remain focused on business semantics, not routing concerns
 
-## Step 6: Create API Controller
+## Step 6: Create Minimal API Endpoints
+
+**Note:** This guide uses .NET 8's minimal API approach instead of traditional controllers for several benefits:
+- **Reduced boilerplate code** - Less ceremony and more focused on the functionality
+- **Better performance** - Direct route-to-delegate mapping without controller instantiation overhead
+- **Cleaner organization** - Endpoints can be grouped by feature using extension methods
+- **OpenAPI integration** - Built-in support for API documentation with `WithSummary()` and `WithDescription()`
+- **Type safety** - Compile-time checking of parameters and return types with `TypedResults`
+
+### 6.1 Device Endpoints Extension Method
 
 ```csharp
-using Microsoft.AspNetCore.Mvc;
 using MediatR;
 using Platform.Shared.Exceptions;
+using Microsoft.AspNetCore.Mvc;
+using Asp.Versioning;
 
-[ApiController]
-[Route("api/v{version:apiVersion}/[controller]")]
-[ApiVersion("1.0")]
-public class DevicesController : ControllerBase
+public static class DeviceEndpoints
 {
-    private readonly IMediator _mediator;
-
-    public DevicesController(IMediator mediator)
+    public static void MapDeviceEndpoints(this WebApplication app)
     {
-        _mediator = mediator;
+        var apiGroup = app.MapGroup("/api/v{version:apiVersion}/devices")
+            .WithTags("Devices")
+            .HasApiVersion(new ApiVersion(1, 0))
+            .RequireAuthorization();
+
+        // POST /api/v1/devices - Create a new device
+        apiGroup.MapPost("/", CreateDevice)
+            .WithSummary("Create a new device")
+            .WithDescription("Creates a new device with the specified properties. Product context is automatically determined from the caller's identity.")
+            .Produces<Guid>(201)
+            .ProducesValidationProblem()
+            .ProducesProblem(400);
+
+        // GET /api/v1/devices/{id} - Get device by ID
+        apiGroup.MapGet("/{id:guid}", GetDevice)
+            .WithSummary("Get device by ID")
+            .WithDescription("Retrieves a device by ID. Only returns devices accessible to the caller's product context.")
+            .Produces<Device>(200)
+            .ProducesProblem(404);
+
+        // GET /api/v1/devices - Get all devices
+        apiGroup.MapGet("/", GetDevices)
+            .WithSummary("Get all devices")
+            .WithDescription("Retrieves all devices accessible to the caller's product context.")
+            .Produces<IEnumerable<Device>>(200);
+
+        // PUT /api/v1/devices/{id}/location - Update device location
+        apiGroup.MapPut("/{id:guid}/location", UpdateDeviceLocation)
+            .WithSummary("Update device location")
+            .WithDescription("Updates the location of a specific device.")
+            .Produces<Device>(200)
+            .ProducesValidationProblem()
+            .ProducesProblem(404)
+            .ProducesProblem(400);
     }
 
-    [HttpPost]
-    public async Task<ActionResult<Guid>> CreateDevice([FromBody] CreateDeviceCommand command)
+    private static async Task<IResult> CreateDevice(
+        CreateDeviceCommand command,
+        ISender sender,
+        CancellationToken cancellationToken)
     {
         try
         {
             // Product context is automatically determined from the caller's identity
             // No need to pass product in the request - it's extracted from authentication context
-            var deviceId = await _mediator.Send(command);
-            return CreatedAtAction(nameof(GetDevice), new { id = deviceId }, deviceId);
+            var deviceId = await sender.Send(command, cancellationToken);
+            return TypedResults.Created($"/api/v1/devices/{deviceId}", deviceId);
         }
         catch (BusinessException ex)
         {
-            return BadRequest(new { error = ex.Code, message = ex.Message });
+            return TypedResults.BadRequest(new { error = ex.Code, message = ex.Message });
         }
     }
 
-    [HttpGet("{id}")]
-    public async Task<ActionResult<Device>> GetDevice(Guid id)
+    private static async Task<IResult> GetDevice(
+        Guid id,
+        ISender sender,
+        CancellationToken cancellationToken)
     {
-        var device = await _mediator.Send(new GetDeviceQuery { DeviceId = id });
-        
-        if (device == null)
-            return NotFound(); // Could be not found OR not accessible due to product segregation
+        try
+        {
+            var device = await sender.Send(new GetDeviceQuery { DeviceId = id }, cancellationToken);
             
-        return Ok(device);
+            if (device == null)
+                return TypedResults.NotFound(); // Could be not found OR not accessible due to product segregation
+                
+            return TypedResults.Ok(device);
+        }
+        catch (BusinessException ex)
+        {
+            return TypedResults.BadRequest(new { error = ex.Code, message = ex.Message });
+        }
     }
 
-    [HttpGet]
-    public async Task<ActionResult<IEnumerable<Device>>> GetDevices()
+    private static async Task<IResult> GetDevices(
+        ISender sender,
+        CancellationToken cancellationToken)
     {
-        // This will automatically only return devices for the caller's product
-        var devices = await _mediator.Send(new GetDevicesQuery());
-        return Ok(devices);
+        try
+        {
+            // This will automatically only return devices for the caller's product
+            var devices = await sender.Send(new GetDevicesQuery(), cancellationToken);
+            return TypedResults.Ok(devices);
+        }
+        catch (BusinessException ex)
+        {
+            return TypedResults.BadRequest(new { error = ex.Code, message = ex.Message });
+        }
+    }
+
+    private static async Task<IResult> UpdateDeviceLocation(
+        Guid id,
+        UpdateDeviceLocationRequest request,
+        ISender sender,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var command = new UpdateDeviceLocationCommand
+            {
+                DeviceId = id,
+                NewLocation = request.Location
+            };
+            
+            var updatedDevice = await sender.Send(command, cancellationToken);
+            return TypedResults.Ok(updatedDevice);
+        }
+        catch (BusinessException ex)
+        {
+            return TypedResults.BadRequest(new { error = ex.Code, message = ex.Message });
+        }
+    }
+}
+
+// Request DTOs for endpoints
+public record UpdateDeviceLocationRequest(string Location);
+```
+
+### 6.2 Additional Command for Location Updates
+
+```csharp
+using Platform.Shared.Cqrs.Mediatr;
+using Platform.Shared.DataLayer.Repositories;
+using Platform.Shared.Exceptions;
+
+public class UpdateDeviceLocationCommand : ICommand<Device>
+{
+    public Guid DeviceId { get; set; }
+    public string NewLocation { get; set; } = string.Empty;
+}
+
+public class UpdateDeviceLocationCommandHandler : ICommandHandler<UpdateDeviceLocationCommand, Device>
+{
+    private readonly IRepository<Device, Guid> _deviceRepository;
+
+    public UpdateDeviceLocationCommandHandler(IRepository<Device, Guid> deviceRepository)
+    {
+        _deviceRepository = deviceRepository;
+    }
+
+    public async Task<Device> Handle(UpdateDeviceLocationCommand request, CancellationToken cancellationToken)
+    {
+        var device = await _deviceRepository.GetByIdAsync(request.DeviceId, cancellationToken);
+        
+        if (device == null)
+            throw new BusinessException("DEVICE_NOT_FOUND", "Device not found or not accessible");
+        
+        device.UpdateLocation(request.NewLocation);
+        
+        return await _deviceRepository.UpdateAsync(device, cancellationToken);
+    }
+}
+
+// Missing GetDevicesQuery for completeness
+public class GetDevicesQuery : IQuery<IEnumerable<Device>>
+{
+}
+
+public class GetDevicesQueryHandler : IQueryHandler<GetDevicesQuery, IEnumerable<Device>>
+{
+    private readonly IReadRepository<Device, Guid> _deviceRepository;
+
+    public GetDevicesQueryHandler(IReadRepository<Device, Guid> deviceRepository)
+    {
+        _deviceRepository = deviceRepository;
+    }
+
+    public async Task<IEnumerable<Device>> Handle(GetDevicesQuery request, CancellationToken cancellationToken)
+    {
+        // Product context is automatically applied via data filters in the repository
+        return await _deviceRepository.GetAllAsync(cancellationToken);
     }
 }
 ```
@@ -433,21 +577,28 @@ For production, add:
 
 ## Step 10: Testing Your Setup
 
-### 10.1 Create a Simple Test
+### 10.1 Create Integration Tests for Minimal APIs
 
 ```csharp
 using Microsoft.AspNetCore.Mvc.Testing;
 using System.Text.Json;
+using System.Net.Http.Json;
+using Xunit;
 
-public class ProductIntegrationTests : IClassFixture<WebApplicationFactory<Program>>
+public class DeviceApiIntegrationTests : IClassFixture<WebApplicationFactory<Program>>
 {
     private readonly WebApplicationFactory<Program> _factory;
     private readonly HttpClient _client;
+    private readonly JsonSerializerOptions _jsonOptions;
 
-    public ProductIntegrationTests(WebApplicationFactory<Program> factory)
+    public DeviceApiIntegrationTests(WebApplicationFactory<Program> factory)
     {
         _factory = factory;
         _client = _factory.CreateClient();
+        _jsonOptions = new JsonSerializerOptions
+        {
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+        };
     }
 
     [Fact]
@@ -461,24 +612,134 @@ public class ProductIntegrationTests : IClassFixture<WebApplicationFactory<Progr
             Location = "TestLocation"
         };
 
-        var json = JsonSerializer.Serialize(command);
-        var content = new StringContent(json, System.Text.Encoding.UTF8, "application/json");
-
         // Act
-        var response = await _client.PostAsync("/api/v1/devices", content);
+        var response = await _client.PostAsJsonAsync("/api/v1/devices", command, _jsonOptions);
 
         // Assert
         response.EnsureSuccessStatusCode();
-        var deviceId = await response.Content.ReadAsStringAsync();
-        Assert.True(Guid.TryParse(deviceId.Trim('"'), out _));
+        Assert.Equal(System.Net.HttpStatusCode.Created, response.StatusCode);
+        
+        var deviceId = await response.Content.ReadFromJsonAsync<Guid>(_jsonOptions);
+        Assert.NotEqual(Guid.Empty, deviceId);
+        
+        // Verify Location header
+        Assert.NotNull(response.Headers.Location);
+        Assert.Contains($"devices/{deviceId}", response.Headers.Location.ToString());
+    }
+
+    [Fact]
+    public async Task GetDevice_ExistingDevice_ReturnsDevice()
+    {
+        // Arrange - First create a device
+        var createCommand = new CreateDeviceCommand
+        {
+            SerialNumber = "DEV002",
+            Model = "TestModel2",
+            Location = "TestLocation2"
+        };
+        
+        var createResponse = await _client.PostAsJsonAsync("/api/v1/devices", createCommand, _jsonOptions);
+        createResponse.EnsureSuccessStatusCode();
+        var deviceId = await createResponse.Content.ReadFromJsonAsync<Guid>(_jsonOptions);
+
+        // Act
+        var response = await _client.GetAsync($"/api/v1/devices/{deviceId}");
+
+        // Assert
+        response.EnsureSuccessStatusCode();
+        var device = await response.Content.ReadFromJsonAsync<Device>(_jsonOptions);
+        Assert.NotNull(device);
+        Assert.Equal(deviceId, device.Id);
+        Assert.Equal("DEV002", device.SerialNumber);
+        Assert.Equal("TestModel2", device.Model);
+        Assert.Equal("TestLocation2", device.Location);
+    }
+
+    [Fact]
+    public async Task GetDevice_NonExistentDevice_ReturnsNotFound()
+    {
+        // Act
+        var response = await _client.GetAsync($"/api/v1/devices/{Guid.NewGuid()}");
+
+        // Assert
+        Assert.Equal(System.Net.HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task GetAllDevices_ReturnsDevicesList()
+    {
+        // Arrange - Create a couple of devices first
+        await _client.PostAsJsonAsync("/api/v1/devices", new CreateDeviceCommand
+        {
+            SerialNumber = "DEV003",
+            Model = "TestModel3",
+            Location = "TestLocation3"
+        }, _jsonOptions);
+        
+        await _client.PostAsJsonAsync("/api/v1/devices", new CreateDeviceCommand
+        {
+            SerialNumber = "DEV004",
+            Model = "TestModel4",
+            Location = "TestLocation4"
+        }, _jsonOptions);
+
+        // Act
+        var response = await _client.GetAsync("/api/v1/devices");
+
+        // Assert
+        response.EnsureSuccessStatusCode();
+        var devices = await response.Content.ReadFromJsonAsync<IEnumerable<Device>>(_jsonOptions);
+        Assert.NotNull(devices);
+        Assert.True(devices.Count() >= 2); // At least the 2 we created
+    }
+
+    [Fact]
+    public async Task UpdateDeviceLocation_ExistingDevice_ReturnsUpdatedDevice()
+    {
+        // Arrange - First create a device
+        var createCommand = new CreateDeviceCommand
+        {
+            SerialNumber = "DEV005",
+            Model = "TestModel5",
+            Location = "OriginalLocation"
+        };
+        
+        var createResponse = await _client.PostAsJsonAsync("/api/v1/devices", createCommand, _jsonOptions);
+        createResponse.EnsureSuccessStatusCode();
+        var deviceId = await createResponse.Content.ReadFromJsonAsync<Guid>(_jsonOptions);
+
+        // Act
+        var updateRequest = new UpdateDeviceLocationRequest("UpdatedLocation");
+        var response = await _client.PutAsJsonAsync($"/api/v1/devices/{deviceId}/location", updateRequest, _jsonOptions);
+
+        // Assert
+        response.EnsureSuccessStatusCode();
+        var updatedDevice = await response.Content.ReadFromJsonAsync<Device>(_jsonOptions);
+        Assert.NotNull(updatedDevice);
+        Assert.Equal("UpdatedLocation", updatedDevice.Location);
+    }
+
+    [Fact]
+    public async Task UpdateDeviceLocation_NonExistentDevice_ReturnsBadRequest()
+    {
+        // Act
+        var updateRequest = new UpdateDeviceLocationRequest("SomeLocation");
+        var response = await _client.PutAsJsonAsync($"/api/v1/devices/{Guid.NewGuid()}/location", updateRequest, _jsonOptions);
+
+        // Assert
+        Assert.Equal(System.Net.HttpStatusCode.BadRequest, response.StatusCode);
+        
+        var errorResponse = await response.Content.ReadFromJsonAsync<object>(_jsonOptions);
+        Assert.NotNull(errorResponse);
     }
 }
 ```
 
 ## Common Scenarios
 
-### Scenario 1: Adding Caching with Multi-Product Context
+### Scenario 1: Adding Caching with Multi-Product Context (Minimal API)
 
+**Enhanced Query Handler with Caching:**
 ```csharp
 public class GetDeviceQueryHandler : IQueryHandler<GetDeviceQuery, Device?>
 {
@@ -508,6 +769,103 @@ public class GetDeviceQueryHandler : IQueryHandler<GetDeviceQuery, Device?>
         }, TimeSpan.FromMinutes(5));
     }
 }
+```
+
+**Minimal API Endpoint with Cache Headers:**
+```csharp
+public static class CachedDeviceEndpoints
+{
+    public static void MapCachedDeviceEndpoints(this WebApplication app)
+    {
+        var apiGroup = app.MapGroup("/api/v{version:apiVersion}/cached-devices")
+            .WithTags("Cached Devices")
+            .HasApiVersion(new ApiVersion(1, 0))
+            .RequireAuthorization();
+
+        // GET /api/v1/cached-devices/{id} - Get device with caching
+        apiGroup.MapGet("/{id:guid}", GetCachedDevice)
+            .WithSummary("Get device with caching")
+            .WithDescription("Retrieves a device by ID with 5-minute cache. Includes cache headers for client-side caching.")
+            .Produces<Device>(200)
+            .ProducesProblem(404)
+            .ProducesProblem(304); // Not Modified
+    }
+
+    private static async Task<IResult> GetCachedDevice(
+        Guid id,
+        ISender sender,
+        HttpContext context,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            // Check if-none-match header for client-side caching
+            var ifNoneMatch = context.Request.Headers.IfNoneMatch.FirstOrDefault();
+            
+            var device = await sender.Send(new GetDeviceQuery { DeviceId = id }, cancellationToken);
+            
+            if (device == null)
+                return TypedResults.NotFound();
+                
+            // Generate ETag based on device data and last updated time
+            var etag = $"\"{device.Id}_{device.UpdatedAt:yyyyMMddHHmmss}\"";
+            
+            // Return 304 if client has current version
+            if (ifNoneMatch == etag)
+                return TypedResults.StatusCode(304); // Not Modified
+            
+            // Add caching headers to response
+            return TypedResults.Ok(device)
+                .WithHeaders(new Dictionary<string, string>
+                {
+                    { "ETag", etag },
+                    { "Cache-Control", "private, max-age=300" }, // 5 minutes
+                    { "Last-Modified", device.UpdatedAt.ToString("r") }
+                });
+        }
+        catch (BusinessException ex)
+        {
+            return TypedResults.BadRequest(new { error = ex.Code, message = ex.Message });
+        }
+    }
+}
+
+// Extension method to add headers to TypedResults (helper)
+public static class TypedResultsExtensions
+{
+    public static IResult WithHeaders(this IResult result, Dictionary<string, string> headers)
+    {
+        return new HeadersResult(result, headers);
+    }
+}
+
+public class HeadersResult : IResult
+{
+    private readonly IResult _innerResult;
+    private readonly Dictionary<string, string> _headers;
+
+    public HeadersResult(IResult innerResult, Dictionary<string, string> headers)
+    {
+        _innerResult = innerResult;
+        _headers = headers;
+    }
+
+    public async Task ExecuteAsync(HttpContext httpContext)
+    {
+        foreach (var header in _headers)
+        {
+            httpContext.Response.Headers.Append(header.Key, header.Value);
+        }
+        
+        await _innerResult.ExecuteAsync(httpContext);
+    }
+}
+```
+
+**Register the cached endpoints in Program.cs:**
+```csharp
+// Add after app.MapDeviceEndpoints();
+app.MapCachedDeviceEndpoints();
 ```
 
 ### Scenario 2: Custom Business Exception
@@ -676,4 +1034,31 @@ app.Use(async (context, next) =>
 
 ---
 
-You're now ready to use Platform.Shared in your application! This setup provides you with auditing, CQRS patterns, integration events, multi-product support, and a solid foundation for building enterprise applications.
+## Summary
+
+You're now ready to use Platform.Shared with minimal APIs in your application! This setup provides you with:
+
+### ✅ **Platform.Shared Features Integrated:**
+- **Auditing system** - Automatic tracking of entity changes with timestamps and user information
+- **CQRS patterns** - Clean separation of commands and queries with MediatR
+- **Integration events** - Event-driven architecture with CloudEvents and clean business payloads  
+- **Multi-product support** - Automatic data segregation and product context handling
+- **Transaction management** - Automatic database transactions with the TransactionBehavior pipeline
+- **Repository patterns** - Abstract data access with automatic product filtering
+
+### ✅ **Modern API Architecture:**
+- **Minimal APIs** - High-performance, low-ceremony endpoint definitions
+- **Type safety** - Compile-time checking with TypedResults and parameter binding
+- **OpenAPI integration** - Built-in Swagger documentation with WithSummary() and WithDescription()
+- **Grouped endpoints** - Clean organization using extension methods and MapGroup()
+- **API versioning** - Built-in support for versioned endpoints
+- **Comprehensive testing** - Full integration test coverage with WebApplicationFactory
+
+### ✅ **Enterprise-Ready Foundation:**
+- **Clean architecture** compliance with Platform.Shared patterns
+- **Production-ready** error handling and validation
+- **Performance optimized** with caching and minimal overhead
+- **Multi-tenant** data isolation handled automatically
+- **Event-driven** integration with other services
+
+This foundation enables you to build scalable, maintainable enterprise applications that integrate seamlessly with the broader Copeland Platform ecosystem.
