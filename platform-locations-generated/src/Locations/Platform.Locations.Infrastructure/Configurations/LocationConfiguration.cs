@@ -86,6 +86,23 @@ public class LocationConfiguration : IEntityTypeConfiguration<Location>
             .IsRequired()
             .HasMaxLength(100); // Platform standard product identifier length
         
+        // Coordinate properties
+        builder.Property(x => x.Latitude)
+            .HasColumnType("DECIMAL(10,8)")
+            .IsRequired(false);
+            
+        builder.Property(x => x.Longitude)
+            .HasColumnType("DECIMAL(11,8)")
+            .IsRequired(false);
+            
+        builder.Property(x => x.GeofenceRadius)
+            .HasColumnType("FLOAT")
+            .IsRequired(false);
+            
+        // ComputedCoordinates is a database computed column accessed via raw SQL queries
+        // Ignore it from EF Core mapping since we handle spatial operations through repository raw SQL
+        builder.Ignore(x => x.ComputedCoordinates);
+        
         // Indexes
         builder.HasIndex(x => x.LocationCode)
             .IsUnique()

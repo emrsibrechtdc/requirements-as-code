@@ -78,7 +78,11 @@ public class LocationsApiIntegrationTests : IntegrationTestBase
             "City",
             "TX",
             "12345",
-            "USA");
+            "USA",
+            null, // Latitude
+            null, // Longitude
+            null  // GeofenceRadius
+        );
 
         // Act
         var response = await PostJsonAsync("/locations/register", invalidCommand);

@@ -12,5 +12,8 @@ public record RegisterLocationCommand
     string? City,
     string? State,
     string? ZipCode,
-    string? Country
+    string? Country,
+    decimal? Latitude,
+    decimal? Longitude,
+    double? GeofenceRadius
 ) : ICommand<LocationResponse>;

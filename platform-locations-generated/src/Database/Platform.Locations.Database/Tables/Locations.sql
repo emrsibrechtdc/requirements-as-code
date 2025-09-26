@@ -9,6 +9,16 @@ CREATE TABLE [dbo].[Locations] (
     [State] NVARCHAR(50) NOT NULL,
     [ZipCode] NVARCHAR(20) NOT NULL,
     [Country] NVARCHAR(50) NOT NULL,
+    [Latitude] DECIMAL(10, 8) NULL,
+    [Longitude] DECIMAL(11, 8) NULL,
+    [GeofenceRadius] FLOAT NULL,
+    [ComputedCoordinates] AS (
+        CASE 
+            WHEN [Latitude] IS NOT NULL AND [Longitude] IS NOT NULL 
+            THEN geography::Point([Latitude], [Longitude], 4326)
+            ELSE NULL 
+        END
+    ) PERSISTED,
     [IsActive] BIT NOT NULL DEFAULT 1,
     [CreatedAt] DATETIMEOFFSET(2) NOT NULL DEFAULT GETUTCDATE(),
     [CreatedBy] NVARCHAR(256) NULL,
@@ -44,4 +54,33 @@ GO
 CREATE UNIQUE INDEX [UX_Locations_Product_LocationCode] 
 ON [dbo].[Locations] ([Product], [LocationCode])
 WHERE [DeletedAt] IS NULL;
+GO
+
+-- Spatial index for coordinate-based queries
+CREATE SPATIAL INDEX [IX_Locations_ComputedCoordinates] 
+ON [dbo].[Locations] ([ComputedCoordinates])
+USING GEOGRAPHY_GRID
+WITH (
+    GRIDS = (LEVEL_1 = MEDIUM, LEVEL_2 = MEDIUM, LEVEL_3 = MEDIUM, LEVEL_4 = MEDIUM),
+    CELLS_PER_OBJECT = 16,
+    PAD_INDEX = OFF,
+    STATISTICS_NORECOMPUTE = OFF,
+    SORT_IN_TEMPDB = OFF,
+    DROP_EXISTING = OFF,
+    ONLINE = OFF,
+    ALLOW_ROW_LOCKS = ON,
+    ALLOW_PAGE_LOCKS = ON
+);
+GO
+
+-- Composite index for product-filtered coordinate queries
+CREATE INDEX [IX_Locations_Product_Coordinates] 
+ON [dbo].[Locations] ([Product], [Latitude], [Longitude], [GeofenceRadius])
+WHERE [DeletedAt] IS NULL AND [Latitude] IS NOT NULL AND [Longitude] IS NOT NULL;
+GO
+
+-- Index for finding locations with coordinates within product
+CREATE INDEX [IX_Locations_Product_HasCoordinates] 
+ON [dbo].[Locations] ([Product], [IsActive])
+WHERE [DeletedAt] IS NULL AND [Latitude] IS NOT NULL;
 GO

@@ -117,7 +117,10 @@ public class IntegrationTestBase : IAsyncLifetime
             f.Address.City(),
             f.Address.StateAbbr(),
             f.Address.ZipCode(),
-            f.Address.CountryCode()
+            f.Address.CountryCode(),
+            null, // Latitude (optional)
+            null, // Longitude (optional)
+            null  // GeofenceRadius (optional)
         ));
 
     protected static readonly Faker<UpdateLocationAddressCommand> UpdateAddressCommandFaker = new Faker<UpdateLocationAddressCommand>()
@@ -177,7 +180,11 @@ public class IntegrationTestBase : IAsyncLifetime
             "Test City",
             "TX",
             "12345",
-            "USA");
+            "USA",
+            null, // Latitude
+            null, // Longitude
+            null  // GeofenceRadius
+        );
 
         var registerResponse = await PostJsonAsync("/locations/register", registerCommand);
         registerResponse.EnsureSuccessStatusCode();

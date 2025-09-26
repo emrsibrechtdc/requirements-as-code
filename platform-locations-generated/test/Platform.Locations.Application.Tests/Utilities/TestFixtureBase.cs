@@ -76,7 +76,10 @@ public abstract class TestFixtureBase
         string city = "Test City",
         string state = "TX",
         string zipCode = "12345",
-        string country = "USA")
+        string country = "USA",
+        decimal? latitude = null,
+        decimal? longitude = null,
+        double? geofenceRadius = null)
     {
         return new RegisterLocationCommand(
             locationCode,
@@ -86,7 +89,10 @@ public abstract class TestFixtureBase
             city,
             state,
             zipCode,
-            country);
+            country,
+            latitude,
+            longitude,
+            geofenceRadius);
     }
 
     protected static UpdateLocationAddressCommand CreateValidUpdateAddressCommand(

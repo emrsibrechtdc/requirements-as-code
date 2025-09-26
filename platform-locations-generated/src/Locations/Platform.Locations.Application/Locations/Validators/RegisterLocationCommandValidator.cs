@@ -39,5 +39,33 @@ public class RegisterLocationCommandValidator : AbstractValidator<RegisterLocati
         RuleFor(x => x.Country)
             .NotEmpty().NotNull()
             .MaximumLength(LocationsConstants.CountryMaxLength);
+        
+        // Coordinate validation - both latitude and longitude must be provided together
+        RuleFor(x => x.Latitude)
+            .Must((command, latitude) => 
+                (latitude.HasValue && command.Longitude.HasValue) || 
+                (!latitude.HasValue && !command.Longitude.HasValue))
+            .WithMessage("Both latitude and longitude must be provided together, or both must be null.");
+        
+        RuleFor(x => x.Latitude)
+            .InclusiveBetween(-90m, 90m)
+            .When(x => x.Latitude.HasValue)
+            .WithMessage("Latitude must be between -90 and 90 degrees.");
+        
+        RuleFor(x => x.Longitude)
+            .InclusiveBetween(-180m, 180m)
+            .When(x => x.Longitude.HasValue)
+            .WithMessage("Longitude must be between -180 and 180 degrees.");
+        
+        RuleFor(x => x.GeofenceRadius)
+            .GreaterThan(0)
+            .When(x => x.GeofenceRadius.HasValue)
+            .WithMessage("Geofence radius must be greater than 0 when specified.");
+        
+        // Geofence radius can only be specified if coordinates are provided
+        RuleFor(x => x.GeofenceRadius)
+            .Must((command, radius) => 
+                !radius.HasValue || (command.Latitude.HasValue && command.Longitude.HasValue))
+            .WithMessage("Geofence radius can only be specified when coordinates are provided.");
     }
 }

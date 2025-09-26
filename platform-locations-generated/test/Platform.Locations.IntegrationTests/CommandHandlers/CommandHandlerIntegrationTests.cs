@@ -333,7 +333,11 @@ public class CommandHandlerIntegrationTests : IntegrationTestBase
             "City",
             "TX",
             "12345",
-            "USA");
+            "USA",
+            null, // Latitude
+            null, // Longitude
+            null  // GeofenceRadius
+        );
 
         // Act & Assert
         await Assert.ThrowsAsync<FluentValidation.ValidationException>(
@@ -359,7 +363,11 @@ public class CommandHandlerIntegrationTests : IntegrationTestBase
             "City",
             "TX",
             "12345",
-            "USA");
+            "USA",
+            null, // Latitude
+            null, // Longitude
+            null  // GeofenceRadius
+        );
 
         // Act & Assert
         // This should either fail validation or throw a database constraint exception

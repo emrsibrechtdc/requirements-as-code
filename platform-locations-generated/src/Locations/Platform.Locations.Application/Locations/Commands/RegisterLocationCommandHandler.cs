@@ -46,6 +46,12 @@ public class RegisterLocationCommandHandler : ICommandHandler<RegisterLocationCo
             request.ZipCode!,
             request.Country!);
         
+        // Set coordinates if provided
+        if (request.Latitude.HasValue && request.Longitude.HasValue)
+        {
+            location.SetCoordinates(request.Latitude.Value, request.Longitude.Value, request.GeofenceRadius);
+        }
+        
         // Platform.Shared automatically handles:
         // - Setting audit fields (CreatedAt, CreatedBy)
         // - Setting product context from middleware
@@ -64,6 +70,9 @@ public class RegisterLocationCommandHandler : ICommandHandler<RegisterLocationCo
                 location.State,
                 location.ZipCode,
                 location.Country,
+                location.Latitude,
+                location.Longitude,
+                location.GeofenceRadius,
                 location.CreatedAt.DateTime));
         
         return _mapper.Map<LocationResponse>(location);

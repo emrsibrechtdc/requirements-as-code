@@ -14,5 +14,8 @@ public record LocationRegisteredIntegrationEvent
     string State,
     string ZipCode,
     string Country,
+    decimal? Latitude,
+    decimal? Longitude,
+    double? GeofenceRadius,
     DateTime RegisteredAt
 ) : IIntegrationEvent;

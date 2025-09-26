@@ -31,9 +31,18 @@ public static class InfrastructureServiceCollectionExtensions
     {
         // Add Entity Framework DbContext with Platform.Shared configuration
         var connectionString = configuration.GetConnectionString("LocationsDb");
+        var isDevelopment = configuration.GetValue<string>("ASPNETCORE_ENVIRONMENT") == "Development";
+        
         services.AddDbContext<LocationsDbContext>(options =>
         {
             options.UseSqlServer(connectionString);
+            
+            // Enable detailed logging for debugging (only in development)
+            if (isDevelopment)
+            {
+                options.EnableSensitiveDataLogging();
+                options.EnableDetailedErrors();
+            }
         });
 
         // Register Unit of Work
