@@ -99,11 +99,9 @@ public class LocationConfiguration : IEntityTypeConfiguration<Location>
             .HasColumnType("FLOAT")
             .IsRequired(false);
             
-        // Computed spatial column (read-only)
-        builder.Property(x => x.ComputedCoordinates)
-            .HasColumnType("GEOGRAPHY")
-            .HasComputedColumnSql("CASE WHEN [Latitude] IS NOT NULL AND [Longitude] IS NOT NULL THEN geography::Point([Latitude], [Longitude], 4326) ELSE NULL END", stored: true)
-            .ValueGeneratedOnAddOrUpdate();
+        // ComputedCoordinates is a database computed column accessed via raw SQL queries
+        // Ignore it from EF Core mapping since we handle spatial operations through repository raw SQL
+        builder.Ignore(x => x.ComputedCoordinates);
         
         // Indexes
         builder.HasIndex(x => x.LocationCode)
