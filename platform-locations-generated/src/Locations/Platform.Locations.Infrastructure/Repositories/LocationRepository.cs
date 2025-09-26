@@ -42,7 +42,7 @@ public class LocationRepository : EfCoreRepository<Location, Guid, LocationsDbCo
         
         var location = await DbContext.Set<Location>()
             .FromSqlRaw(@"
-                SELECT * FROM [Locations] l
+                SELECT TOP(1) * FROM [Locations] l
                 WHERE l.[DeletedAt] IS NULL 
                   AND l.[IsActive] = 1
                   AND l.[Latitude] IS NOT NULL 
